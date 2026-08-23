@@ -1,0 +1,48 @@
+# --- Secrets and local config -------------------------------------------------
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+secrets/
+satm-broker.local.yaml
+
+# --- Node (docs tooling, e.g. mermaid-cli) -------------------------------------
+node_modules/
+package-lock.json
+npm-debug.log*
+
+# --- Solidity / Foundry --------------------------------------------------------
+contracts/out/
+contracts/cache/
+contracts/broadcast/
+contracts/lib/
+!contracts/vendor/
+
+# --- Go ------------------------------------------------------------------------
+bin/
+*.exe
+*.test
+vendor/
+!contracts/vendor/
+
+# --- Python --------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+
+# --- Local runtime state -------------------------------------------------------
+deploy/compose/data/
+*.sqlite
+*.db
+sam-node-data/
+router.key
+
+# --- OS / editor ---------------------------------------------------------------
+.DS_Store
+Thumbs.db
+.idea/
+*.swp
