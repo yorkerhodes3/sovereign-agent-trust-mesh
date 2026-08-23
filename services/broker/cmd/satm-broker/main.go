@@ -70,10 +70,10 @@ func run() error {
 
 	fetcher := fetch.New(cfg.FetchConfig())
 
-	// The in-memory store is correct for a single broker instance and is the
-	// only implementation with test evidence behind it. internal/pgstore exists
-	// for multi-replica deployments but has never been run (see its package
-	// doc), so it is deliberately NOT the default.
+	// The in-memory store is correct for a single broker instance. Multi-replica
+	// deployments need internal/pgstore, whose atomicity comes from a database
+	// constraint rather than a process-local mutex: two broker processes sharing
+	// no state would each accept the same nonce once.
 	nonceStore := store.NewMemory()
 
 	verifier, err := binding.NewVerifier(verifierCfg, chain, fetcher, nonceStore)

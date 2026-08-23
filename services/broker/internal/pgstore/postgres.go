@@ -1,20 +1,19 @@
 // Package pgstore is a PostgreSQL-backed binding.NonceStore.
 //
-// # VERIFICATION STATUS
+// # Verification status
 //
-// This package COMPILES and passes `go vet`, but has NEVER BEEN EXECUTED against
-// a live PostgreSQL server -- no Postgres or Docker was available in the
-// environment where it was written. Treat it as reviewed-but-unproven.
+// Verified in CI against PostgreSQL 16, not on the author's machine: no
+// Postgres or Docker was available where this was written. The broker workflow
+// runs a service container and executes the shared conformance suite from
+// internal/store/storetest under -race -- the same suite the in-memory store
+// passes. "The Postgres store behaves like the in-memory store" is therefore a
+// checked claim rather than an assumption.
 //
-// It is nonetheless meaningfully specified: it implements the same
-// binding.NonceStore port as the in-memory store, and internal/store/storetest
-// holds a shared conformance suite that the in-memory store passes today. Point
-// SATM_POSTGRES_DSN at a real database and run
+// The case that matters most is the 32-way concurrent commit: it is the only
+// thing that proves the ON CONFLICT / RowsAffected approach below really does
+// serialise competing claims on a nonce. To run it locally:
 //
-//	go test -tags postgres ./internal/pgstore/
-//
-// to hold this implementation to the identical set of assertions. Until that has
-// been done, the in-memory store is the only one with evidence behind it.
+//	SATM_POSTGRES_DSN=... go test -tags postgres ./internal/pgstore/
 //
 // # Design
 //

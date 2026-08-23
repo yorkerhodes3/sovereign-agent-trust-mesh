@@ -186,12 +186,11 @@ independently. A positive result only enables the optional **channel binding** c
 
 **This is the core of the prototype.** Everything else composes existing standards.
 
-> ### 🔨 IN PROGRESS — binding verifier landed (2026-08-23)
+> ### 🔨 IN PROGRESS — ports implemented, pipeline proven end-to-end (2026-08-23)
 >
-> `services/broker/internal/binding` implements the full **B1–B15** pipeline with
-> **31/31 tests passing** (73% statement coverage). One test per check, each proving
-> denial in isolation, plus threats TH-1, TH-3a, TH-5, TH-5b, TH-17 and signature
-> malleability. Detail in [services/broker/README.md](services/broker/README.md).
+> `services/broker` now runs the full **B1–B15** pipeline against real infrastructure.
+> The verifier's three ports (`ChainClient`, `RegistrationFetcher`, `NonceStore`) are
+> implemented, and a `satm-broker` binary composes them behind `POST /v1/bindings`.
 >
 > | Task | State |
 > | --- | --- |
@@ -199,14 +198,32 @@ independently. A positive result only enables the optional **channel binding** c
 > | P2-2 PeerID proof (B4, B5) | ✅ done |
 > | P2-2a registry allow-list (B2a) | ✅ done |
 > | P2-3 wallet proof (B9, EOA + ERC-1271) | ✅ done |
+> | P2-4 SSRF-hardened resolver | ✅ done — `internal/fetch` |
 > | P2-5 registration file + `sam://` grammar (B11–B13) | ✅ done |
 > | P2-6 full `verify_binding` (B1–B15) | ✅ done |
-> | P2-4 SSRF-hardened resolver | next — interface defined, impl pending |
-> | P2-7 Postgres trust store | next — interface defined, impl pending |
-> | P2-8…P2-14 API, enrollment gate, reconciliation, call attestation | pending |
+> | P2-7 Postgres trust store | ✅ done — `internal/pgstore`, verified in CI |
+> | P2-8 `POST /v1/bindings` | ✅ done — `cmd/satm-broker` |
+> | P2-9…P2-14 enrollment gate, label projection, CLI, reconciliation, call attestation | pending |
 >
-> `ChainClient`, `RegistrationFetcher` and `NonceStore` are ports, so the remaining
-> work is substitution rather than redesign.
+> **What is actually proven, and how:**
+>
+> - **9 end-to-end tests** drive the real HTTP API against ERC-8004 registries deployed
+>   on Anvil. A valid binding is admitted with the correct CAID; replay, unknown agent,
+>   forged peer signature and wrong-mesh are each denied with the specific expected
+>   reason code — not merely "rejected somehow".
+> - **7 live-chain tests** confirm the hand-rolled ABI encoding reaches the intended
+>   functions on real bytecode. This matters because `getAgentWallet(uint256)` has no
+>   publicly documented selector to pin against, so a derivation bug would be invisible
+>   to any stubbed test. The same tests observe `agentWallet` clearing on ERC-721
+>   transfer *through the broker's own code path*, which is the TH-5 property the
+>   revocation story depends on.
+> - **The Postgres store is verified in CI**, not just written: a service container runs
+>   the same conformance suite the in-memory store passes, including a 32-way concurrent
+>   commit under `-race`. That case is the only thing that proves B3-checks /
+>   B15-consumes is genuinely atomic rather than decorative.
+>
+> Remaining Phase 2 work is integration with SAM (enrollment gate, label projection,
+> reconciliation) rather than anything in the binding pipeline itself.
 
 | ID | Task | Detail | Acceptance |
 | --- | --- | --- | --- |

@@ -4,12 +4,15 @@ The Trust Broker: the service that verifies Agent Mesh Bindings, gates SAM
 enrollment on on-chain verification, and projects on-chain trust into mesh
 policy.
 
-Phase 2 delivers the **binding verifier** — the core novel mechanism. Enrollment
-gating, policy projection and the Trust API follow in the rest of Phase 2/3.
+Phase 2 delivers the **binding verifier** — the core novel mechanism — together
+with the three ports it runs on and a `satm-broker` binary that composes them.
+Enrollment gating, policy projection and the Trust API follow in the rest of
+Phase 2/3.
 
 ## What is implemented and proven
 
 ```
+cmd/satm-broker/   HTTP service: POST /v1/bindings, GET /v1/bindings/{caid}
 internal/binding/
   document.go      canonical document + normative field encodings
   canonical.go     RFC 8785 JCS serialisation
@@ -19,9 +22,14 @@ internal/binding/
   registration.go  checks B11-B13  ERC-8004 registration file + sam:// grammar
   verifier.go      checks B1-B15   the ordered pipeline
   reasons.go                        stable reason codes
+internal/fetch/    RegistrationFetcher, SSRF-hardened  (TH-8, TH-9)
+internal/chainrpc/ ChainClient over JSON-RPC + hand-rolled ABI  (TH-11)
+internal/store/    in-memory NonceStore + shared conformance suite
+internal/pgstore/  PostgreSQL NonceStore
+internal/config/   satm-broker.yaml loading and validation
 ```
 
-`go test ./...` → **31/31 pass**, 73% statement coverage.
+`go test ./...` → **all pass**; coverage 90%+ in every port package.
 
 The suite follows [SPECIFICATION.md §4.6](../../SPECIFICATION.md): **one test per
 check, each proving denial in isolation**, so a failing test name points straight
@@ -38,8 +46,39 @@ at the numbered check it defends.
 | `B9a_RejectsWalletAlreadyBoundToAnotherAgent` | **TH-5b.** Two agents sharing a wallet would silently share ERC-8226 mandates and caps. |
 | `RecoverAddress_RejectsHighS` | Signature malleability: `(r, n-s)` is equally valid, so accepting both gives one authorisation two encodings. |
 | `RebindingRevokesThePriorBinding` | **A3.** Key rotation keeps the `agentId` and retires the old PeerID atomically. |
+| `BlockedIP` / `FetchRefusesRedirectToLoopback` | **TH-8.** The `agentURI` is attacker-chosen, so every fetch is attacker-directed. Includes `169.254.169.254` (cloud metadata) and IPv4-mapped IPv6 loopback, the classic bypass. |
+| `CheckJSONShapeDepth` | **TH-9.** 40 KB of `[[[[...` is under any byte cap yet exhausts the stack during decoding. |
+| `QuorumRefusesOnDisagreement` | **TH-11.** A single lying RPC provider could otherwise forge the chain state an entire binding rests on. |
 
-## Three decisions worth knowing
+## Tests that need real infrastructure
+
+Two build-tagged suites run against live services. Both execute in CI
+([.github/workflows/broker.yml](../../.github/workflows/broker.yml)).
+
+```bash
+# Live chain: needs anvil + the registries deployed (see contracts/)
+go test -tags integration ./internal/chainrpc/ ./cmd/satm-broker/
+
+# Postgres NonceStore conformance
+SATM_POSTGRES_DSN=... go test -tags postgres ./internal/pgstore/
+```
+
+These exist because the stubbed tests genuinely cannot catch certain classes of
+bug:
+
+- **`getAgentWallet(uint256)` has no publicly documented selector** to pin
+  against, unlike `ownerOf` and `tokenURI`. A wrong keccak derivation would look
+  perfectly healthy against a scripted JSON-RPC server and fail only in
+  production. Only a call to real bytecode settles it.
+- **The TH-5 clear-on-transfer property** is asserted at the Solidity level in
+  `contracts/`, but that says nothing about whether the *broker* observes it. The
+  live test checks it through the broker's own code path.
+- **The Postgres store's atomicity** lives in the database, not in Go. The shared
+  conformance suite in `internal/store/storetest` is run against both stores, so
+  "the Postgres store behaves like the in-memory store" is checked rather than
+  assumed — the 32-way concurrent-commit case in particular.
+
+## Four decisions worth knowing
 
 **PeerID derivation is delegated, not reimplemented.** The obvious
 `multihash(raw key bytes)` is wrong in the dangerous direction — it accepts keys
@@ -58,25 +97,27 @@ Binding documents carry every numeric value as a decimal string precisely so no
 float enters the signing path; if a future schema adds a real number, this must
 grow a full ECMAScript `Number::toString` rather than be loosened.
 
-**Ports, not concrete clients.** `ChainClient`, `RegistrationFetcher` and
-`NonceStore` are interfaces, so the whole B1–B15 pipeline is testable with no RPC
-endpoint, no IPFS and no database. The fakes are simple in-memory
-implementations, not mocks with call-order expectations — the tests assert on
-*verifier* behaviour, and coupling them to internals would make legitimate
-refactors look like failures.
+**SSRF blocking happens at dial time, not at parse time.** Validating the
+hostname up front is insufficient: a name can resolve to a public address on the
+first lookup and to `127.0.0.1` on the second. The check therefore lives in the
+transport's `DialContext` hook, where the address actually being connected to is
+visible.
+
+**Quorum disagreement is an error, not a vote.** When RPC providers return
+different answers the client refuses to proceed rather than taking a majority or
+the first response. For reads that gate admission, "my providers disagree about
+who owns this agent" is exactly the situation in which continuing is unsafe.
 
 ## Not yet implemented
 
 | Piece | Phase |
 | --- | --- |
-| `ChainClient` against a real RPC endpoint | 2 (next) |
-| SSRF-hardened `RegistrationFetcher` | 2 (next) |
-| Postgres `NonceStore` | 2 (next) |
 | Enrollment gate (`/admin/enrollments` polling) | 2 |
-| Trust API, policy projection, reconciliation | 2–3 |
-
-The interfaces are defined and exercised, so these are substitutions rather than
-redesigns.
+| Label projection into Biscuit tokens | 2 |
+| `satm-cli bind` | 2 |
+| Reconciliation loop | 2 |
+| Call attestation (V1–V8) | 2 |
+| Trust API, policy projection | 2–3 |
 
 ## Running
 
@@ -85,10 +126,13 @@ cd services/broker
 go build ./...
 go vet ./...
 go test ./...
+
+# Serve, against a devnet configured in satm-broker.yaml
+go run ./cmd/satm-broker -config satm-broker.yaml
+curl http://127.0.0.1:8081/healthz
 ```
 
 **The race detector needs cgo**, which was unavailable on the Windows machine
-this was written on. `-race` therefore runs in CI
-([.github/workflows/broker.yml](../../.github/workflows/broker.yml)) rather than
-locally — which is where a concurrency check belongs anyway, but it does mean the
-B15 race test was first exercised under `-race` on the runner, not here.
+this was written on. `-race` therefore runs in CI rather than locally — which is
+where a concurrency check belongs anyway, but it does mean the B15 race test was
+first exercised under `-race` on the runner, not here.
