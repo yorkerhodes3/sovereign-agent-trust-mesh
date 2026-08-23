@@ -51,7 +51,7 @@ windows.
 
 | Document | What it covers |
 | --- | --- |
-| [CONCEPT-BRIEF.md.md](CONCEPT-BRIEF.md.md) | The original vision and six-plane architecture |
+| [CONCEPT-BRIEF.md](CONCEPT-BRIEF.md) | The original vision and six-plane architecture |
 | **[SPECIFICATION.md](SPECIFICATION.md)** | Full technical specification: binding protocol, trust tiers, components, contracts, flows, threat model, conformance |
 | **[PLAN.md](PLAN.md)** | Phased implementation plan, spikes, work breakdown, risk register, milestones |
 | [docs/DEMO.md](docs/DEMO.md) | The scripted end-to-end scenario, including ten negative controls |

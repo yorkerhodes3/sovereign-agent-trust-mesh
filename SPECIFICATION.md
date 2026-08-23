@@ -3,7 +3,7 @@
 **Prototype codename:** SATM
 **Version:** 0.1 (Draft for Implementation)
 **Status:** Specification — approved for prototyping
-**Derived from:** [CONCEPT-BRIEF.md.md](CONCEPT-BRIEF.md.md)
+**Derived from:** [CONCEPT-BRIEF.md](CONCEPT-BRIEF.md)
 **Companion documents:** [PLAN.md](PLAN.md) · [docs/RESEARCH-NOTES.md](docs/RESEARCH-NOTES.md) · [docs/adr/](docs/adr)
 
 ---
@@ -1919,7 +1919,7 @@ revocation, validation request/response including repeated responses for the sam
 ```
 sovereign-agent-trust-mesh/
 ├─ README.md
-├─ CONCEPT-BRIEF.md.md
+├─ CONCEPT-BRIEF.md
 ├─ SPECIFICATION.md
 ├─ PLAN.md
 ├─ docs/

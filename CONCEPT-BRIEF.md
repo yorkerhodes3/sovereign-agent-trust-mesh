@@ -408,7 +408,7 @@ Evidence is anchored to Ethereum L1.
 
 ---
 
-# Potential Microsoft Opportunities
+# Enterprise Opportunities
 
 ## Enterprise Agent Marketplace
 
@@ -426,7 +426,7 @@ Examples:
 
 ## Badge and Credential Network
 
-Building on Microsoft credentials.
+Building on existing enterprise identity and credential systems, such as Microsoft Entra ID, Okta, or any W3C Verifiable Credentials issuer.
 
 An agent could present:
 

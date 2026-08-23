@@ -460,7 +460,7 @@ direction that does not foreclose them.
 | Theme | Direction |
 | --- | --- |
 | Decentralising admission | Replace the single broker with a quorum of attesters, or move binding verification on-chain so the mesh reads it directly |
-| Enterprise identity | Bridge Entra ID / verifiable credentials into `ComplianceProvider` and into the OIDC claims the control plane consumes |
+| Enterprise identity | Bridge enterprise identity providers (Entra ID, Okta) and W3C Verifiable Credentials into `ComplianceProvider` and into the OIDC claims the control plane consumes |
 | Reputation markets | Auditor networks, insurance pools, and staked reviewer reputation — all anticipated by ERC-8004 |
 | Real validation | zkML and TEE attestation once ERC-8004's validation section stabilises |
 | Cross-chain identity | Agents registered on multiple chains, with the mesh resolving across them |
