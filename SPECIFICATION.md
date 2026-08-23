@@ -676,17 +676,50 @@ value constraints (≤255 chars, no `,` `=` or control characters) — verified 
 > normalises on write and the generated Datalog is produced from the same normalised value, so the
 > two cannot drift.
 
-**Primary path:** labels are attested at enrollment approval, so they are carried inside the
-control-plane-signed Biscuit and are therefore unforgeable by the node.
+**Mechanism (verified empirically — spike S-1, see [docs/SPIKE-FINDINGS.md](docs/SPIKE-FINDINGS.md)):**
+labels are **declared by the node** and **attested by the admin at approval**.
 
-**Fallback path (if approve-time labels are unsupported):** the broker declares labels through
-the enrollment request's own label declaration mechanism and *validates* them at approval —
-i.e. the node declares `erc8004.agent_id=42`, and the broker approves only if that declaration
-matches the verified binding, rejecting otherwise. The trust property is identical because
-approval is the gate.
+An earlier draft of this section offered a "primary" path in which the broker supplied
+labels *in* the approve call, with declare-then-validate as a fallback. **The primary
+path does not exist.** `POST /admin/enrollments/{id}/approve` takes an empty body; the
+control plane mints whatever labels were recorded on the pending request. SAM's own
+protobuf says so:
 
-**Neither path lets a node self-assert an unverified label**, because the control plane only
-mints label facts for approved enrollments.
+```proto
+// Operator-declared labels; the admin approving the enrollment attests
+// them (see EnrollRequest.labels).
+map<string, string> labels = 5;
+```
+
+So the flow is:
+
+1. The node declares labels at startup: `sam-node run --labels "k=v,k2=v2"`.
+   (Note: the flag is on `run`, **not** on `join`.)
+2. They appear on the pending enrollment, readable by the broker via
+   `GET /admin/enrollments`.
+3. The broker compares each declared label against the verified binding and
+   **approves only on an exact match**, rejecting otherwise.
+4. Approval mints them into the control-plane-signed Biscuit.
+
+**The trust property is unchanged by this correction**, which is why it is a correction
+and not a redesign: a node may declare `erc8004.agent_id=999`, but it gets no Biscuit
+unless the broker agrees. Approval is the gate; declaration is only an input to it.
+**A node can never self-assert an unverified label**, because the control plane mints
+label facts solely for approved enrollments.
+
+Verified Biscuit contents after approval:
+
+```
+facts: [ expiration(2026-08-24T18:13:51Z)
+         node("12D3KooWALK8sCkh…")  client_peer_id("12D3KooWALK8sCkh…")
+         label("erc8004.agent_id", "42")
+         label("erc8004.registry", "eip155:84532:0x8004a818bfb912233c491871b3d84c89a494bd9e")
+         label("satm.trust_tier", "t3-validated")
+         role("sam:role:node")  granted_service_all_types()  target_unrestricted() ]
+```
+
+CAID values survive flag parsing, protobuf, storage and minting unchanged — colons and
+all — which was an open risk given SAM's label-value constraints.
 
 #### 6.1.4 Trust API
 
@@ -903,24 +936,52 @@ The sidecar re-checks the caller before the agent sees the request:
 
 #### 6.3.2 Outbound (client side)
 
-Because initiator-side Biscuit evaluation is **UNVERIFIED** upstream (research note Q1), the
-sidecar performs the initiator-side check itself and does not depend on SAM for it:
+The sidecar performs the initiator-side check itself:
 
 1. resolve the target PeerID → CAID → trust tier
 2. enforce the caller's configured `minPeerTier`
-3. if the call carries a mandate context, call `canExecute` **at the current block**
+3. if the call carries a mandate context, call `canExecuteStrict` **at the current block**
 4. mint a Call Attestation (§6.3.3) and attach it to the outbound MCP request
 5. allow / deny, emit evidence
+
+**SAM provides a genuine second layer here (verified in spike S-3).** An earlier draft treated
+initiator-side evaluation as UNVERIFIED and deliberately did not rely on it. It exists:
+`call_remote_tool` accepts a `required_labels` argument, and `VerifyPeerLabels`
+(`internal/node/labels_gate.go`) verifies the responder's returned Biscuit against trusted
+control-plane keys and fails closed. Observed:
+
+```
+required_labels erc8004.agent_id=99   (true of the peer)  -> "Echo: satm-s3"
+required_labels erc8004.agent_id=12345 (false)            -> DENIED
+  provider 12D3KooWETadEYZD… has no attested label matching
+  map[erc8004.agent_id:12345]
+```
+
+The sidecar therefore SHOULD pass the peer's required tier as `required_labels`, so SAM enforces
+it at the transport layer in addition to the sidecar's own check. Two caveats:
+
+- It is **opt-in per call**. Omitting `required_labels` means no check at all, so this is not a
+  safety net that applies by default.
+- It matches only coarse attested labels. It cannot express "this asset, this action, within
+  this remaining cap", which is why mandate decisions remain a live `canExecuteStrict` plus
+  authoritative on-chain enforcement (§9.5).
 
 #### 6.3.3 Call Attestation — authenticated caller identity
 
 **The problem.** The inbound sidecar sits behind `sam-node` and receives a forwarded MCP request.
-SAM authenticates the peer at the transport layer (`WithBiscuitAuth`), but whether it surfaces an
-authenticated caller PeerID to a locally-spawned service is **not documented and not verified**
-(research note 1.7). If the sidecar simply trusted a `peerId` field in the request, any caller
-could name someone else's CAID and inherit their tier and authority — a straightforward
-impersonation. The S-2 fallback in [PLAN.md](PLAN.md), which moves inbound enforcement entirely
-to the sidecar, is unsound without a fix.
+SAM authenticates the peer at the transport layer (`WithBiscuitAuth`), but **it does not pass the
+authenticated caller identity to a locally-spawned service.** This was confirmed in spike S-5:
+`internal/node/gate.go` describes the path as a *"dumb-pipe proxy"* and calls
+`mcpSvc.HandleStreamPassThrough(s)`, forwarding the raw stream. `reqCtx` carries the caller's
+`PeerID` but is used only to select the target service and is then discarded. Empirically, the
+spawned subprocess sees no `SAM_*`, `PEER_*` or `CALLER_*` environment variables.
+
+So if the sidecar simply trusted a `peerId` field in the request, any caller could name someone
+else's CAID and inherit their tier and authority. **The Call Attestation is therefore necessary,
+not defence-in-depth** — it is the only mechanism by which the inbound sidecar learns who called.
+The S-2 fallback in [PLAN.md](PLAN.md), which moves inbound enforcement entirely into the
+sidecar, is sound *because* this exists.
+
 
 **The mechanism.** Each agent's sidecar holds an Ed25519 **sidecar key** whose public half is
 inside the binding document (`sidecarKey`, §4.3) and is therefore covered by *both* binding
@@ -974,11 +1035,11 @@ must be the *current* binding, re-binding an agent (which B15 does atomically) i
 outstanding attestation signed under the old sidecar key. The binding id therefore doubles as a
 key epoch.
 
-**Channel binding.** If SAM exposes an authenticated caller PeerID to the local service, the
-responder MUST additionally require it to equal `callerPeerId`. Whether SAM does so is a distinct
-question from the initiator-side Biscuit evaluation studied in spike S-3, and is investigated
-separately as **spike S-5** ([PLAN.md §3](PLAN.md)). The design is sound without it and strictly
-stronger with it.
+**Channel binding.** SAM does **not** expose an authenticated caller PeerID to a locally-spawned
+service — confirmed in spike S-5 (§6.3.3 rationale above). `attestation.requireChannelBinding`
+therefore stays `false` for this version of SAM: there is no second channel to bind to. The
+setting is retained because the check is cheap and strictly strengthening if upstream ever adds
+caller metadata to the forwarded stream.
 
 This deliberately does not reuse the `agentWallet` key: that key is cold, on-chain-facing, and
 must not be in the hot path of every tool call. The sidecar key is a hot, rotatable credential
@@ -1581,9 +1642,10 @@ Role assignment is recomputed by the reconciliation loop (§6.1.5) on every tier
 
 ### 10.2 Node attenuation
 
-Each `sam-node.yaml` carries broker-generated attenuation. Because these are evaluated against
-the **caller's** attested facts (verified: `internal/node/middleware.go:244-254`), this is a real
-inbound trust gate at the transport layer:
+Each `sam-node.yaml` carries broker-generated attenuation. These are evaluated against the
+**caller's** control-plane-attested facts — **verified empirically in spike S-2**
+([docs/SPIKE-FINDINGS.md](docs/SPIKE-FINDINGS.md)), not merely read from
+`internal/node/middleware.go`. This is a real inbound trust gate at the transport layer:
 
 ```yaml
 version: "v1alpha1"
@@ -1611,6 +1673,22 @@ Biscuit is minted, and a coarse `deny if not label("satm.mandate","active")` wou
 unsound (it cannot see asset, action, or caps) and needlessly restrictive (it would block
 read-only tools such as `quote_*`). Asset-moving tools are gated by the sidecar and,
 authoritatively, on-chain.
+
+**Observed denial (spike S-2).** A peer attested `erc8004.agent_id=777` calling a node whose
+check requires `"42"`:
+
+```
+[Auth] AuthZ Denied 12D3KooWGRdGJHH86vp8ifKUb4VeLmiMswQLqSoTUWmwuj7jVwxn:
+  biscuit: verification failed: failed to verify check #1:
+  check if label("erc8004.agent_id", "42")
+```
+
+Two properties of this are stronger than originally specified:
+
+- The denial occurs **inside the auth handshake**, before any MCP payload is read.
+- It gates the **service catalogue** as well as service calls — the denied peer was rejected at
+  `system://sam.catalog`, so it cannot even enumerate what the node offers. Negative control N-3
+  is therefore stronger than claimed: a denied caller learns nothing at all.
 
 The `sam-node.yaml` parser validates every Datalog string at load time
 (`internal/node/config.go:48-73`), so a malformed projection fails the node at startup instead of
@@ -2018,7 +2096,10 @@ attestation:                           # call attestations, §6.3.3
   ttl: 30s
   clockSkew: 5s
   nonceRetention: 5m
-  requireChannelBinding: false         # set true once spike S-3 confirms SAM exposes caller PeerID
+  # PERMANENTLY false for this SAM version: spike S-5 confirmed sam-node
+  # dumb-pipe proxies to local services without caller metadata, so there is
+  # no second channel to bind to. Retained in case upstream adds one.
+  requireChannelBinding: false
 
 trust:
   reputation:
@@ -2061,8 +2142,8 @@ degraded:
 
 | ID | Issue | Resolution path |
 | --- | --- | --- |
-| **OI-1** | Approve-time label attestation schema unverified | Phase 1 spike; §6.1.3 fallback |
-| **OI-2** | Initiator-side Biscuit evaluation in SAM unverified | Phase 1 spike; sidecar already covers it |
+| ~~OI-1~~ | ~~Approve-time label attestation schema unverified~~ | **CLOSED** by spike S-1. Labels are declared by the node (`run --labels`) and attested by the admin at approval; the approve call takes an empty body. §6.1.3 corrected. |
+| ~~OI-2~~ | ~~Initiator-side Biscuit evaluation in SAM unverified~~ | **CLOSED** by spikes S-2 and S-3. Node attenuation evaluates the caller's attested labels and denies at the handshake (S-2); the initiator can verify the responder via `required_labels`, failing closed (S-3). |
 | **OI-3** | ERC-8004 Validation Registry is being revised with the TEE community | `ValidationPort` abstraction; Phase 4 |
 | **OI-4** | ERC-8226 is Draft and may change | Conformance suite per MUST clause (§16.2) |
 | **OI-5** | Multi-asset mandates need one mandate per asset | Documented; the demo uses two assets to make the constraint visible rather than hiding it |
@@ -2074,3 +2155,4 @@ degraded:
 | **OI-11** | A compromised broker can omit evidence before anchoring | Counterparty receipts make omission detectable (§12.3); prevention needs a decentralised attester quorum ([PLAN.md §13](PLAN.md)) |
 | **OI-12** | The immutable identity pin means an agent wallet can never be re-purposed for a different `agentId`, even legitimately | Deliberate: re-pinning would reopen the TH-5c bypass. Operators use a fresh wallet per agent, which §7.2a already requires |
 | **OI-13** | `TreasuryNote` being transfer-restricted means holders cannot freely trade it | Correct for a regulated instrument, and matches ERC-3643/ERC-7943 practice. A secondary-market design would route trades through a mandate-checked venue, not through open ERC-20 transfers |
+| **OI-14** | **Upstream defect: bootstrap enrollment cannot complete.** `sam-node`/`sam-router` POST to `/enroll/status`; the server accepts only GET with a `peer_id` query param, so a node never retrieves its approved Biscuit | Found in spike S-1 ([docs/SPIKE-FINDINGS.md §6](docs/SPIKE-FINDINGS.md)). Report upstream; until fixed the devnet carries the one-line patch or uses interactive OIDC. Tracked as PLAN risk R-12 |

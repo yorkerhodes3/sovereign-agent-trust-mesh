@@ -1,16 +1,27 @@
 # SATM local devnet.
 #
 # ============================== STATUS =====================================
-# UNVERIFIED. Authored in Phase 0 but NOT yet executed: the development machine
-# used for Phase 0 has no Docker. Everything below is derived from the SAM docs
-# and the component defaults, not from a run that succeeded.
+# PARTIALLY VERIFIED. The SAM service definitions below were corrected against a
+# REAL mesh brought up during Phase 1 spikes (see docs/SPIKE-FINDINGS.md), but
+# this compose file itself has still never been executed: the Phase 0/1 machine
+# has no Docker. The spikes ran the same binaries directly as processes.
 #
-# Treat the SAM service definitions in particular as a first draft. Phase 1
-# spike S-1 is the first task that actually exercises them, and it is expected
-# to correct this file rather than confirm it.
+# Known-correct from the spikes:
+#   - --auto-approve-enrollment defaults to FALSE, so manual approval is the
+#     default rather than something to switch on.
+#   - the control plane REQUIRES --issuer even when every node uses a bootstrap
+#     token and no OIDC token is ever verified.
+#   - a router on a loopback devnet needs BOTH --allow-loopback and
+#     --external-addr, or it announces no addresses and nodes fail with
+#     "control plane returned no router addresses".
+#   - nodes co-located on one host MUST get distinct libp2p --listen ports, or
+#     they try to "dial to self".
 #
-# What IS verified in Phase 0 is the chain + contract layer, which needs no
-# Docker. Use `make devnet-chains` / `.\make.ps1 devnet-up` for that subset.
+# BLOCKER (risk R-12): bootstrap enrollment cannot complete against upstream SAM.
+# sam-node/sam-router POST to /enroll/status but the server only accepts GET with
+# a peer_id query param, so a node never collects its approved Biscuit. Until
+# that is fixed upstream, these images will enroll-and-hang. See
+# docs/SPIKE-FINDINGS.md section 6.
 # ===========================================================================
 #
 # Roles:
@@ -139,6 +150,11 @@ services:
       - --control-plane=http://sam-control-plane:8080
       - --listen=/ip4/0.0.0.0/tcp/4501
       - --listen=/ip4/0.0.0.0/udp/4501/quic-v1
+      # Verified in spike S-2 setup: without BOTH of the next two, the router
+      # registers but announces ListenAddrs: [] and every node then fails with
+      # "control plane returned no router addresses".
+      - --allow-loopback
+      - --external-addr=/ip4/127.0.0.1/tcp/4501
       - --keys-path=/data/router.key
     ports:
       - "4501:4501/tcp"

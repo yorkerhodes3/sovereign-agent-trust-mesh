@@ -156,13 +156,18 @@ time, so **malformed policy fails fast at startup**.
 
 ### 1.7 Gaps and risks
 
+> **Updated 2026-08-23.** Several rows below were *empirically resolved* in the Phase 1
+> spikes. See [SPIKE-FINDINGS.md](SPIKE-FINDINGS.md) for evidence.
+
 | Item | Status |
 | --- | --- |
 | A2A support | `a2a` is an accepted service-type prefix, but no A2A integration guide or SDK binding was found. Treat A2A as **thin/experimental**. |
 | Go plugin/interceptor API for third-party trust logic | **Not present.** There is no public extension interface, and `internal/` is not importable. Custom in-process logic would require a fork. |
-| Client-side enforcement of the responder's returned Biscuit | The mutual-auth response exists (`AuthResponse.Biscuit`); the extent of initiator-side policy evaluation is **UNVERIFIED**. The design therefore does **not** depend on it, and performs initiator-side trust checks in the SATM sidecar instead. |
+| Client-side enforcement of the responder's returned Biscuit | ✅ **RESOLVED (spike S-3): it exists.** `VerifyPeerLabels` in `internal/node/labels_gate.go`, exposed as `required_labels` on `call_remote_tool`, verifies the responder's Biscuit against trusted control-plane keys and fails closed. Opt-in per call. |
+| Caller identity passed to a locally-spawned MCP service | ✅ **RESOLVED (spike S-5): it is NOT.** `internal/node/gate.go` dumb-pipe proxies via `HandleStreamPassThrough(s)`; `reqCtx.PeerID` selects the target service and is then discarded. No `SAM_*`/`PEER_*` env vars in the subprocess. This is why SATM's Call Attestation is mandatory. |
+| Bootstrap-token enrollment | ❌ **BROKEN UPSTREAM (found in spike S-1).** `sam-node`/`sam-router` POST to `/enroll/status`; the server accepts only `GET` with a `peer_id` query param. A node never retrieves its approved Biscuit. Tracked as PLAN risk R-12. |
 | Test coverage | Docs state testing is "intentionally minimal". |
-| `--auto-approve-enrollment` | Defaults to permissive in the Helm chart; SATM **requires** it disabled. |
+| `--auto-approve-enrollment` | ✅ **Verified: defaults to `false`.** Manual approval — which SATM requires — is already the default, not something to switch on. |
 
 ---
 
@@ -417,8 +422,9 @@ hook**.
 
 | # | Question | Where it is handled |
 | --- | --- | --- |
-| Q1 | Does the SAM initiator evaluate the responder's returned Biscuit against local policy? | Not relied upon; the SATM sidecar performs initiator-side checks. Spike in Phase 1. |
-| Q2 | Exact request/response schema of `POST /admin/enrollments/{id}/approve`, including whether labels can be attested at approval time. | Phase 1 spike; fallback is `/policies` + bootstrap-token pre-provisioning. |
+| Q1 | Does the SAM initiator evaluate the responder's returned Biscuit against local policy? | ✅ **CLOSED (spike S-3): yes**, via `required_labels` on `call_remote_tool`, failing closed. SATM gains a second enforcement layer; the sidecar still performs its own check because `required_labels` cannot express asset/action/cap. |
+| Q2 | Exact request/response schema of `POST /admin/enrollments/{id}/approve`, including whether labels can be attested at approval time. | ✅ **CLOSED (spike S-1):** approve takes an **empty body** and returns `200 Enrollment approved`. Labels are declared by the node (`sam-node run --labels`) and attested by the admin at approval. |
 | Q3 | Will the ERC-8004 ValidationRegistry interface change after the TEE-community revision? | Isolated behind `ValidationPort`; Phase 4 only. |
 | Q4 | Will ERC-8226 change before Final? | Interfaces vendored verbatim + a conformance suite derived from the EIP's MUST clauses. |
-| Q5 | Go 1.25 toolchain availability in CI. | Pinned in `.tool-versions`; SAM consumed as a released binary/container where possible. |
+| Q5 | Go 1.25 toolchain availability in CI. | ✅ **CLOSED:** Go 1.25.14 installed portably (checksum-verified, no admin rights) and all four SAM binaries built from source on Windows. |
+| Q6 | When will the `/enroll/status` verb mismatch be fixed upstream? | **NEW (spike S-1).** `sam-node`/`sam-router` POST; the server accepts only GET with `peer_id`. Blocks headless enrollment. PLAN risk R-12. |

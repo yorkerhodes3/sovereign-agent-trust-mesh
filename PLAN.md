@@ -81,10 +81,27 @@ and prints both PeerIDs and the deployed registry addresses.
 
 ## 3. Phase 1 — De-risking Spikes (Week 1–2)
 
-**Goal:** convert the three open unknowns into verified facts before committing to the design.
+**Goal:** convert the open unknowns into verified facts before committing to the design.
 Each spike is timeboxed; each has a defined fallback already specified.
 
-### S-1 — Enrollment approval and label attestation *(2 days, blocking)*
+> ## ✅ STATUS: ALL FIVE SPIKES CLOSED (2026-08-23)
+>
+> Run against a **real SAM mesh built from source** — one control plane, one router,
+> three nodes — not mocks and not source reading alone. Full evidence in
+> [docs/SPIKE-FINDINGS.md](docs/SPIKE-FINDINGS.md).
+>
+> | Spike | Result |
+> | --- | --- |
+> | **S-1** | Labels declared by node, attested by admin at approval. Spec's "primary" path did not exist; §6.1.3 corrected. **OI-1 closed.** |
+> | **S-2** | **Confirmed.** Attenuation evaluates the caller's attested labels and denies at the handshake — and gates the service catalogue too. **OI-2 closed.** |
+> | **S-3** | Initiator-side verification **exists** via `required_labels`, fails closed. Better than assumed. |
+> | **S-4** | Closed in Phase 0 as 18 passing contract tests. |
+> | **S-5** | SAM does **not** surface caller identity to local services. Call Attestation is therefore mandatory; `requireChannelBinding` stays `false`. |
+>
+> One blocking upstream defect found: bootstrap enrollment cannot complete
+> (`POST` vs `GET` on `/enroll/status`). See risk **R-12**.
+
+### S-1 — Enrollment approval and label attestation *(2 days, blocking)* — ✅ CLOSED
 
 **Question (OI-1):** what exactly does `POST /admin/enrollments/{id}/approve` accept, and can the
 approver attest labels at approval time?
@@ -103,7 +120,7 @@ identical because approval is the gate.
 
 **Kill criterion:** if enrollment cannot be gated at all, escalate to A-2's fork fallback.
 
-### S-2 — Node attenuation enforcement *(2 days, blocking)*
+### S-2 — Node attenuation enforcement *(2 days, blocking)* — ✅ CLOSED
 
 **Question:** does a `sam-node.yaml` `attenuation.checks` entry referencing `label(...)` actually
 deny a caller lacking that label?
@@ -122,7 +139,7 @@ change that breaks this assumption is caught immediately.
 to the sidecar. The design already tolerates this — node attenuation is defence in depth
 ([SPECIFICATION.md §10.3](SPECIFICATION.md)), not the sole gate.
 
-### S-3 — Initiator-side trust *(1 day, non-blocking)*
+### S-3 — Initiator-side trust *(1 day, non-blocking)* — ✅ CLOSED
 
 **Question (OI-2):** does a SAM initiator evaluate the responder's returned
 `AuthResponse.Biscuit` against local policy?
@@ -134,7 +151,7 @@ whose labels violate local checks.
 ([SPECIFICATION.md §6.3.2](SPECIFICATION.md)). This spike only determines whether we get a second
 layer for free.
 
-### S-4 — ERC-8004 registry behaviours *(2 days, parallel)*
+### S-4 — ERC-8004 registry behaviours *(2 days, parallel)* — ✅ CLOSED in Phase 0
 
 **Method:** against the vendored registries on Anvil, write integration tests proving:
 `register()` → `agentId`; `setAgentWallet` EIP-712 round trip; **`agentWallet` clears on
@@ -144,7 +161,7 @@ layer for free.
 **Why it matters:** TH-5 (agent sold to attacker) and TH-4 (Sybil) mitigations both depend on these
 being true in the *implementation*, not just in the prose.
 
-### S-5 — Does SAM expose an authenticated caller PeerID to a local service? *(1 day, non-blocking)*
+### S-5 — Does SAM expose an authenticated caller PeerID to a local service? *(1 day, non-blocking)* — ✅ CLOSED
 
 **Question:** when `sam-node` forwards an inbound MCP request to a locally-spawned service, does it
 attach the authenticated caller PeerID (header, metadata, or environment)?
@@ -383,6 +400,7 @@ part of the scripted demo:
 | **R-9** | Scope creep into production compliance (real KYC) | Medium | High | `ComplianceProvider` is explicitly a stub with an adapter seam; out of scope per §1.3 | All |
 | **R-10** | IPFS availability affects binding verification | Medium | Low | Negative caching, `staleRevokeAfter` grace, HTTPS fallback endpoint permitted | Mesh |
 | **R-11** | Demo depends on public testnet liveness | Medium | Medium | Local Anvil devnet is the primary demo target; testnet is a promotion, not a dependency | Demo |
+| **R-12** | **Upstream defect: bootstrap-token enrollment cannot complete.** `sam-node`/`sam-router` POST to `/enroll/status`; the server accepts only GET with a `peer_id` query param, so a node never retrieves its approved Biscuit and polls 405 forever | **Certain** (observed) | **High** — blocks the headless enrollment path the devnet and CI depend on | Found in spike S-1. One-line client fix verified locally. Report upstream; until merged, the devnet carries the patch or uses interactive OIDC. Isolated to enrollment: nothing about SATM's authorization model is affected ([docs/SPIKE-FINDINGS.md §6](docs/SPIKE-FINDINGS.md)) | Mesh |
 
 ---
 

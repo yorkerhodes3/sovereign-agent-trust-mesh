@@ -55,6 +55,7 @@ windows.
 | **[SPECIFICATION.md](SPECIFICATION.md)** | Full technical specification: binding protocol, trust tiers, components, contracts, flows, threat model, conformance |
 | **[PLAN.md](PLAN.md)** | Phased implementation plan, spikes, work breakdown, risk register, milestones |
 | [docs/DEMO.md](docs/DEMO.md) | The scripted end-to-end scenario, including 18 negative controls |
+| **[docs/SPIKE-FINDINGS.md](docs/SPIKE-FINDINGS.md)** | **Phase 1 results — what was tested against a real SAM mesh, what held, and what didn't** |
 | [docs/RESEARCH-NOTES.md](docs/RESEARCH-NOTES.md) | Every upstream fact the design relies on, with citations |
 | [docs/adr/](docs/adr) | Architecture decision records |
 
@@ -135,8 +136,8 @@ A trust prototype that only demonstrates the happy path proves nothing.
 
 ## Status
 
-**Phase 0 (Foundations) in progress.** The contract layer is real and verified;
-the mesh layer is authored but not yet executed.
+**Phase 0 complete. Phase 1 spikes complete.** The contract layer is verified, and every
+blocking assumption about SAM has now been tested against a real mesh.
 
 | Component | State |
 | --- | --- |
@@ -144,31 +145,36 @@ the mesh layer is authored but not yet executed.
 | Foundry project + vendored ERC-8004 registries | **Working — 18/18 tests pass** |
 | ERC-8226 interfaces (verbatim) + SATM extension interfaces | Compiling |
 | Registry deployment to a live chain | **Verified on anvil** |
-| CI (Solidity build/test/lint + vendor integrity) | Authored, runs on push |
-| Devnet compose (Postgres, IPFS, Dex, SAM) | **Authored, UNVERIFIED — needs Docker** |
+| CI (Solidity build/test/lint + vendor integrity) | **Green on a clean Linux runner** |
+| **Phase 1 spikes S-1…S-5** | **All closed against a real SAM mesh** |
+| Devnet compose | Corrected from spike findings; still not executed (no Docker) |
 | Broker, indexer, sidecar, agents | Not started (Phases 2–5) |
 
-What "verified" means here: `forge test` passes 18 tests against the **real**
-vendored registries, and those registries were deployed to a live Anvil node and
-answered calls. What it does not mean: nothing involving SAM has been run, because
-this machine has no Go and no Docker.
+### The result the design depended on
 
-See [contracts/README.md](contracts/README.md) for the detail, and [PLAN.md §11](PLAN.md)
-for milestones. Phase 1 spikes must close before Phase 2 begins — five upstream
-behaviours are read from source but not yet empirically confirmed.
+**S-2 passed.** Node-level attenuation really does evaluate the *caller's*
+control-plane-attested labels, and denies at the transport handshake:
 
-### The one result worth reading
+```
+[Auth] AuthZ Denied 12D3KooWGRdG…: biscuit: verification failed:
+  failed to verify check #1: check if label("erc8004.agent_id", "42")
+```
 
-`test_agentWallet_isClearedOnTransfer` passes. Threat TH-5 and negative control
-N-7 both rest on ERC-8004 clearing `agentWallet` when an agent NFT is transferred,
-and [ADR-0003](docs/adr/0003-agentwallet-is-the-rams-agent-address.md) calls that
-behaviour "free". It is only free if it is real — now it is checked on every build
-rather than asserted in prose.
+A peer attesting `agent_id=42` got the full tool catalogue; a peer attesting `777` was
+refused before any payload was read — and could not even enumerate the node's services.
+Had this failed, [ADR-0001](docs/adr/0001-integrate-via-control-plane-not-fork.md), the
+defence-in-depth model, and negative control N-3 would all have needed reworking.
 
-The companion test proves the opposite kind of thing: an attacker who registers
-three of their own agents *does* satisfy a distinct-client minimum with a
-fabricated perfect score. That is why the reviewer allow-list is curated rather
-than counted.
+Two other findings changed the design rather than confirming it:
+
+- **S-1**: the spec described a "primary" label path that **does not exist**. Labels are
+  declared by the node and attested by the admin at approval. The trust property is
+  unchanged — approval is still the gate — but §6.1.3 was wrong and is now corrected.
+- **S-5**: SAM does **not** pass caller identity to a local MCP service. That makes the
+  Call Attestation *necessary*, not defence-in-depth.
+
+Full evidence, including a blocking upstream defect found along the way, is in
+[docs/SPIKE-FINDINGS.md](docs/SPIKE-FINDINGS.md).
 
 ---
 
