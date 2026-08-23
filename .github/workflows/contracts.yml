@@ -60,27 +60,14 @@ jobs:
       # The vendored ERC-8004 sources must stay byte-identical to the pinned
       # upstream commit. If someone edits vendor/ instead of extending src/,
       # this fails and tells them why.
+      #
+      # Calls the SAME script developers run locally (`make verify-vendor`)
+      # rather than a copy of it. An earlier version inlined the logic here and
+      # promptly drifted: the inline regex mishandled the aligned whitespace in
+      # UPSTREAM and built a malformed URL, which the local checker did not.
       - name: Verify vendored sources are unmodified
-        run: |
-          set -euo pipefail
-          SHA=$(grep -oP '(?<=^commit: ).*' vendor/erc8004/UPSTREAM)
-          echo "Pinned upstream commit: $SHA"
-          fail=0
-          for f in IdentityRegistryUpgradeable ReputationRegistryUpgradeable \
-                   ValidationRegistryUpgradeable ERC1967Proxy MinimalUUPS; do
-            url="https://raw.githubusercontent.com/erc-8004/erc-8004-contracts/$SHA/contracts/$f.sol"
-            if ! curl -sSfL "$url" -o "/tmp/$f.sol"; then
-              echo "::error::could not fetch $f.sol from pinned commit"
-              fail=1
-              continue
-            fi
-            if ! diff -u "/tmp/$f.sol" "vendor/erc8004/$f.sol"; then
-              echo "::error::vendor/erc8004/$f.sol has been modified."
-              echo "vendor/ must mirror upstream exactly. Put SATM changes in src/."
-              fail=1
-            fi
-          done
-          exit $fail
+        working-directory: .
+        run: bash tools/verify-vendor.sh
 
   gas-report:
     name: gas snapshot
@@ -91,8 +78,13 @@ jobs:
       - uses: foundry-rs/foundry-toolchain@v1
         with:
           version: nightly
-      - run: forge soldeer install
+      - name: Install dependencies (locked)
+        run: forge soldeer install
         working-directory: contracts
-      - run: forge snapshot --check || echo "::notice::gas snapshot drifted; run 'forge snapshot' locally"
+      # A committed .gas-snapshot makes this a real check: an unexplained gas
+      # change shows up in review instead of drifting silently. Non-blocking,
+      # because a legitimate change should not require a second push to land.
+      - name: Compare against committed snapshot
         working-directory: contracts
+        run: forge snapshot --check
         continue-on-error: true

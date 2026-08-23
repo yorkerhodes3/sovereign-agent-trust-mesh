@@ -12,9 +12,19 @@ if [[ ! -f "$UPSTREAM_FILE" ]]; then
   exit 1
 fi
 
-SHA="$(sed -n 's/^commit:[[:space:]]*//p' "$UPSTREAM_FILE" | head -1)"
+# Parse the pinned commit. The UPSTREAM file aligns its columns, so there may be
+# MORE THAN ONE space after the colon, and a trailing CR can survive a checkout
+# on a misconfigured client. Strip both -- an unnoticed leading space here builds
+# a malformed URL and yields a confusing "URL rejected" error instead of an
+# obvious one. CI hit exactly that before this was hardened.
+SHA="$(sed -n 's/^commit:[[:space:]]*//p' "$UPSTREAM_FILE" | head -1 | tr -d '[:space:]')"
 if [[ -z "$SHA" ]]; then
   echo "error: no 'commit:' line in $UPSTREAM_FILE" >&2
+  exit 1
+fi
+
+if [[ ! "$SHA" =~ ^[0-9a-f]{40}$ ]]; then
+  echo "error: 'commit:' in $UPSTREAM_FILE is not a 40-char hex sha: '$SHA'" >&2
   exit 1
 fi
 
