@@ -165,7 +165,7 @@ time, so **malformed policy fails fast at startup**.
 | Go plugin/interceptor API for third-party trust logic | **Not present.** There is no public extension interface, and `internal/` is not importable. Custom in-process logic would require a fork. |
 | Client-side enforcement of the responder's returned Biscuit | ✅ **RESOLVED (spike S-3): it exists.** `VerifyPeerLabels` in `internal/node/labels_gate.go`, exposed as `required_labels` on `call_remote_tool`, verifies the responder's Biscuit against trusted control-plane keys and fails closed. Opt-in per call. |
 | Caller identity passed to a locally-spawned MCP service | ✅ **RESOLVED (spike S-5): it is NOT.** `internal/node/gate.go` dumb-pipe proxies via `HandleStreamPassThrough(s)`; `reqCtx.PeerID` selects the target service and is then discarded. No `SAM_*`/`PEER_*` env vars in the subprocess. This is why SATM's Call Attestation is mandatory. |
-| Bootstrap-token enrollment | ❌ **BROKEN UPSTREAM (found in spike S-1).** `sam-node`/`sam-router` POST to `/enroll/status`; the server accepts only `GET` with a `peer_id` query param. A node never retrieves its approved Biscuit. Tracked as PLAN risk R-12. |
+| Bootstrap-token enrollment | ❌ **BROKEN UPSTREAM (found in spike S-1).** `sam-node`/`sam-router` POST to `/enroll/status`; the server accepts only `GET` with a `peer_id` query param. A node never retrieves its approved Biscuit. Tracked as PLAN risk R-12; reported upstream as [google/sam#297](https://github.com/google/sam/issues/297). |
 | Test coverage | Docs state testing is "intentionally minimal". |
 | `--auto-approve-enrollment` | ✅ **Verified: defaults to `false`.** Manual approval — which SATM requires — is already the default, not something to switch on. |
 

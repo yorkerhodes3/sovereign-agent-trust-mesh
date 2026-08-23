@@ -145,10 +145,12 @@ blocking assumption about SAM has now been tested against a real mesh.
 | Foundry project + vendored ERC-8004 registries | **Working — 18/18 tests pass** |
 | ERC-8226 interfaces (verbatim) + SATM extension interfaces | Compiling |
 | Registry deployment to a live chain | **Verified on anvil** |
-| CI (Solidity build/test/lint + vendor integrity) | **Green on a clean Linux runner** |
+| CI (Solidity + Go) | **Green on a clean Linux runner** |
 | **Phase 1 spikes S-1…S-5** | **All closed against a real SAM mesh** |
+| **Phase 2: Agent Mesh Binding verifier (B1–B15)** | **Working — 31/31 tests pass** |
+| Broker chain client, fetcher, store, API | Interfaces defined; implementations next |
 | Devnet compose | Corrected from spike findings; still not executed (no Docker) |
-| Broker, indexer, sidecar, agents | Not started (Phases 2–5) |
+| Indexer, sidecar, agents | Not started (Phases 3–5) |
 
 ### The result the design depended on
 
@@ -173,8 +175,23 @@ Two other findings changed the design rather than confirming it:
 - **S-5**: SAM does **not** pass caller identity to a local MCP service. That makes the
   Call Attestation *necessary*, not defence-in-depth.
 
-Full evidence, including a blocking upstream defect found along the way, is in
+Full evidence, including a blocking upstream defect
+([google/sam#297](https://github.com/google/sam/issues/297)), is in
 [docs/SPIKE-FINDINGS.md](docs/SPIKE-FINDINGS.md).
+
+### The binding verifier now exists
+
+The mechanism this whole project is about is implemented and tested:
+**31/31 tests, one per check B1–B15**, each proving denial in isolation.
+
+The one worth reading is `B2a_RejectsAttackerDeployedRegistry`. The attacker deploys
+their own ERC-8004-shaped registry, mints themselves `agentId 42` with a wallet they
+control, publishes a matching registration file, and signs both proofs correctly. The
+submission is **internally consistent** — every other check passes. Only the registry
+allow-list stops it, which is why the EIP-712 domain is derived from *our* allow-list
+and never from the submitted document.
+
+See [services/broker/README.md](services/broker/README.md).
 
 ---
 

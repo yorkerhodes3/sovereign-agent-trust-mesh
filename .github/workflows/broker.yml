@@ -1,0 +1,76 @@
+name: broker
+
+# Go CI for the SATM broker. Mirrors the contracts workflow: path-filtered so
+# doc-only commits do not burn runner minutes, and locked dependencies so a
+# transitive bump cannot silently change what was tested.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "services/broker/**"
+      - ".github/workflows/broker.yml"
+  pull_request:
+    paths:
+      - "services/broker/**"
+      - ".github/workflows/broker.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: broker-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: services/broker
+
+jobs:
+  build-and-test:
+    name: build, vet, test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: services/broker/go.mod
+          cache-dependency-path: services/broker/go.sum
+
+      - name: Verify go.mod and go.sum are tidy
+        run: |
+          go mod tidy
+          if ! git diff --exit-code -- go.mod go.sum; then
+            echo "::error::go.mod/go.sum are not tidy; run 'go mod tidy' and commit"
+            exit 1
+          fi
+
+      - name: Check formatting
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "::error::not gofmt'd:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: Build
+        run: go build ./...
+
+      - name: Vet
+        run: go vet ./...
+
+      # The race detector needs cgo, which is available on the Linux runner but
+      # not on the Windows dev machine this was written on. CI is therefore the
+      # first place the B15 concurrency test runs under -race, which is exactly
+      # the kind of check that belongs in CI rather than locally.
+      - name: Test (race)
+        run: go test -race -count=1 ./...
+        env:
+          CGO_ENABLED: 1
+
+      - name: Coverage
+        run: |
+          go test -coverprofile=coverage.out ./...
+          go tool cover -func=coverage.out | tail -20

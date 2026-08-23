@@ -335,7 +335,9 @@ scratch clone outside the repository, and nothing in `contracts/`, `services/` o
 about, rather than being blocked by an unrelated HTTP-verb bug.
 
 **Actions:**
-- [ ] Report upstream to `google/sam` with the reproduction above.
+- [x] **Reported upstream: [google/sam#297](https://github.com/google/sam/issues/297)**
+      (filed 2026-08-23). Re-verified still present at upstream `main` @ `674af93`
+      immediately before filing, so this is not a stale observation from our pinned clone.
 - [ ] Until fixed, the devnet must either carry the same patch or use interactive
       OIDC enrollment. Recorded as risk **R-12** in [PLAN.md](../PLAN.md).
 

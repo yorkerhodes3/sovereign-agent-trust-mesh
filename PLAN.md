@@ -186,6 +186,28 @@ independently. A positive result only enables the optional **channel binding** c
 
 **This is the core of the prototype.** Everything else composes existing standards.
 
+> ### 🔨 IN PROGRESS — binding verifier landed (2026-08-23)
+>
+> `services/broker/internal/binding` implements the full **B1–B15** pipeline with
+> **31/31 tests passing** (73% statement coverage). One test per check, each proving
+> denial in isolation, plus threats TH-1, TH-3a, TH-5, TH-5b, TH-17 and signature
+> malleability. Detail in [services/broker/README.md](services/broker/README.md).
+>
+> | Task | State |
+> | --- | --- |
+> | P2-1 document + canonicalisation | ✅ done |
+> | P2-2 PeerID proof (B4, B5) | ✅ done |
+> | P2-2a registry allow-list (B2a) | ✅ done |
+> | P2-3 wallet proof (B9, EOA + ERC-1271) | ✅ done |
+> | P2-5 registration file + `sam://` grammar (B11–B13) | ✅ done |
+> | P2-6 full `verify_binding` (B1–B15) | ✅ done |
+> | P2-4 SSRF-hardened resolver | next — interface defined, impl pending |
+> | P2-7 Postgres trust store | next — interface defined, impl pending |
+> | P2-8…P2-14 API, enrollment gate, reconciliation, call attestation | pending |
+>
+> `ChainClient`, `RegistrationFetcher` and `NonceStore` are ports, so the remaining
+> work is substitution rather than redesign.
+
 | ID | Task | Detail | Acceptance |
 | --- | --- | --- | --- |
 | P2-1 | Binding document + canonicalisation | RFC 8785 JCS in Go; `type`/schema validation; **normative field encodings** (§4.3): lowercase-hex addresses, decimal-string `agentId` and `nonce`, RFC 3339 timestamps | Golden-vector tests; byte-identical canonicalisation across Go and Python; a checksummed-vs-lowercase address must produce the same CAID or be rejected, never silently differ |
@@ -400,7 +422,7 @@ part of the scripted demo:
 | **R-9** | Scope creep into production compliance (real KYC) | Medium | High | `ComplianceProvider` is explicitly a stub with an adapter seam; out of scope per §1.3 | All |
 | **R-10** | IPFS availability affects binding verification | Medium | Low | Negative caching, `staleRevokeAfter` grace, HTTPS fallback endpoint permitted | Mesh |
 | **R-11** | Demo depends on public testnet liveness | Medium | Medium | Local Anvil devnet is the primary demo target; testnet is a promotion, not a dependency | Demo |
-| **R-12** | **Upstream defect: bootstrap-token enrollment cannot complete.** `sam-node`/`sam-router` POST to `/enroll/status`; the server accepts only GET with a `peer_id` query param, so a node never retrieves its approved Biscuit and polls 405 forever | **Certain** (observed) | **High** — blocks the headless enrollment path the devnet and CI depend on | Found in spike S-1. One-line client fix verified locally. Report upstream; until merged, the devnet carries the patch or uses interactive OIDC. Isolated to enrollment: nothing about SATM's authorization model is affected ([docs/SPIKE-FINDINGS.md §6](docs/SPIKE-FINDINGS.md)) | Mesh |
+| **R-12** | **Upstream defect: bootstrap-token enrollment cannot complete.** `sam-node`/`sam-router` POST to `/enroll/status`; the server accepts only GET with a `peer_id` query param, so a node never retrieves its approved Biscuit and polls 405 forever | **Certain** (observed) | **High** — blocks the headless enrollment path the devnet and CI depend on | Found in spike S-1. One-line client fix verified locally. **Reported upstream: [google/sam#297](https://github.com/google/sam/issues/297).** Until merged, the devnet carries the patch or uses interactive OIDC. Isolated to enrollment: nothing about SATM's authorization model is affected ([docs/SPIKE-FINDINGS.md §6](docs/SPIKE-FINDINGS.md)) | Mesh |
 
 ---
 
