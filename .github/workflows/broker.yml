@@ -144,7 +144,13 @@ jobs:
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
         with:
-          version: stable
+          version: nightly
+
+      # contracts/dependencies/ is gitignored and restored from soldeer.lock,
+      # so without this the vendored registries cannot resolve their imports.
+      - name: Install contract dependencies (locked)
+        working-directory: contracts
+        run: forge soldeer install
 
       - name: Start Anvil
         working-directory: contracts
