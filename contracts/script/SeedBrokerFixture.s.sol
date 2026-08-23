@@ -86,6 +86,7 @@ contract SeedBrokerFixture is Script {
         );
 
         string memory path = string.concat("deployments/broker-fixture-", vm.toString(block.chainid), ".json");
+        vm.createDir("deployments", true);
         vm.writeFile(path, json);
         console2.log("wrote", path);
     }

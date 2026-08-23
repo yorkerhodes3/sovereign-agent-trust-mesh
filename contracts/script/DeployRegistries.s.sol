@@ -70,6 +70,10 @@ contract DeployRegistries is Script {
         );
 
         string memory path = string.concat("deployments/", vm.toString(block.chainid), ".json");
+        // vm.writeFile does not create parent directories, and deployments/ is
+        // gitignored for local chain ids -- so on a fresh clone or in CI the
+        // directory genuinely does not exist yet.
+        vm.createDir("deployments", true);
         vm.writeFile(path, json);
         console2.log("wrote", path);
     }
