@@ -9,10 +9,12 @@ on:
     branches: [main]
     paths:
       - "services/broker/**"
+      - "contracts/**"
       - ".github/workflows/broker.yml"
   pull_request:
     paths:
       - "services/broker/**"
+      - "contracts/**"
       - ".github/workflows/broker.yml"
   workflow_dispatch:
 
@@ -61,6 +63,13 @@ jobs:
       - name: Vet
         run: go vet ./...
 
+      # Build-tagged files are invisible to the default build, so without this
+      # they rot silently until someone tries to run them.
+      - name: Vet tagged builds
+        run: |
+          go vet -tags integration ./...
+          go vet -tags postgres ./...
+
       # The race detector needs cgo, which is available on the Linux runner but
       # not on the Windows dev machine this was written on. CI is therefore the
       # first place the B15 concurrency test runs under -race, which is exactly
@@ -74,3 +83,107 @@ jobs:
         run: |
           go test -coverprofile=coverage.out ./...
           go tool cover -func=coverage.out | tail -20
+
+  postgres:
+    name: postgres nonce store
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    # The Postgres NonceStore was written where no database was available, so
+    # this job is the ONLY evidence it works. It runs the same conformance suite
+    # the in-memory store passes -- including the 32-way concurrent-commit case,
+    # which is what actually proves the ON CONFLICT / RowsAffected approach
+    # serialises competing claims on a nonce (check B15).
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: satm
+          POSTGRES_PASSWORD: satm
+          POSTGRES_DB: satm
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: services/broker/go.mod
+          cache-dependency-path: services/broker/go.sum
+
+      - name: Run NonceStore conformance suite against PostgreSQL
+        run: go test -tags postgres -race -count=1 -v ./internal/pgstore/
+        env:
+          CGO_ENABLED: 1
+          SATM_POSTGRES_DSN: postgres://satm:satm@localhost:5432/satm?sslmode=disable
+
+  integration:
+    name: live chain integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    # Proves the hand-rolled ABI encoding actually reaches the intended
+    # functions on real ERC-8004 bytecode. The unit tests use a scripted
+    # JSON-RPC server, which cannot catch a wrong function selector --
+    # getAgentWallet(uint256) in particular has no publicly documented selector
+    # to pin against.
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: services/broker/go.mod
+          cache-dependency-path: services/broker/go.sum
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+
+      - name: Start Anvil
+        working-directory: contracts
+        run: |
+          anvil --port 8545 --silent &
+          for i in $(seq 1 30); do
+            if cast block-number --rpc-url http://127.0.0.1:8545 >/dev/null 2>&1; then
+              echo "anvil is up"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::anvil did not become ready"
+          exit 1
+
+      - name: Deploy ERC-8004 registries
+        working-directory: contracts
+        env:
+          PRIVATE_KEY: "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
+        run: |
+          forge script script/DeployRegistries.s.sol \
+            --rpc-url http://127.0.0.1:8545 --broadcast \
+            --private-key "$PRIVATE_KEY" --skip-simulation
+
+      - name: Seed broker fixture
+        working-directory: contracts
+        env:
+          PRIVATE_KEY: "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
+        run: |
+          forge script script/SeedBrokerFixture.s.sol \
+            --rpc-url http://127.0.0.1:8545 --broadcast \
+            --private-key "$PRIVATE_KEY" --skip-simulation
+
+      - name: Chain client against live registries
+        run: go test -tags integration -race -count=1 -v -run TestLive ./internal/chainrpc/
+        env:
+          CGO_ENABLED: 1
+
+      - name: Broker end-to-end
+        run: go test -tags integration -race -count=1 -v -run TestE2E ./cmd/satm-broker/
+        env:
+          CGO_ENABLED: 1

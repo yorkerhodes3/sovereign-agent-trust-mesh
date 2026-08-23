@@ -1,0 +1,50 @@
+# SATM broker configuration -- local devnet.
+#
+# Matches the state produced by:
+#   anvil --port 8545
+#   forge script script/DeployRegistries.s.sol  --rpc-url http://127.0.0.1:8545 --broadcast --private-key $PK
+#   forge script script/SeedBrokerFixture.s.sol --rpc-url http://127.0.0.1:8545 --broadcast --private-key $PK
+#
+# See SPECIFICATION.md section 18 for the full reference.
+
+version: v1
+meshId: satm-dev
+listen: 127.0.0.1:8081
+
+controlPlane:
+  url: http://127.0.0.1:8080
+  # Spike S-1 confirmed sam-control-plane defaults --auto-approve-enrollment to
+  # false. SATM depends on that; this records the dependency explicitly.
+  requireManualApproval: true
+
+chains:
+  identity:
+    chainId: 31337
+    rpcUrls:
+      - http://127.0.0.1:8545
+    # With one endpoint there is no quorum protection: a lying RPC provider can
+    # forge chain state (TH-11). Acceptable on a devnet where the node is local;
+    # production MUST list independent providers.
+    rpcQuorum: 1
+    confirmations: 1
+    identityRegistry: "0x9fe46736679d2d9a65f0992f2272de9f3c7fa6e0"
+
+binding:
+  maxTTL: 168h
+  clockSkew: 60s
+  # MUST exceed maxTTL. Otherwise a still-valid document outlives the record of
+  # its own nonce and becomes replayable.
+  nonceRetention: 240h
+  # Check B2a. Every chain read, the EIP-712 domain and the CAID derive from the
+  # MATCHED entry here -- never from the submitted document (TH-3a). Lowercase is
+  # required: SAM label matching is exact and case-sensitive (TH-18).
+  trustedRegistries:
+    - "eip155:31337:0x9fe46736679d2d9a65f0992f2272de9f3c7fa6e0"
+  requireUniqueAgentWallet: true
+  oneActiveBindingPerAgent: true
+  fetch:
+    allowedSchemes: [https, ipfs, data]
+    maxBytes: 262144
+    timeout: 5s
+    maxRedirects: 3
+    blockPrivateRanges: true
