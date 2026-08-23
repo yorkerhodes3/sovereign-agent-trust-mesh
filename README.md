@@ -54,7 +54,7 @@ windows.
 | [CONCEPT-BRIEF.md](CONCEPT-BRIEF.md) | The original vision and six-plane architecture |
 | **[SPECIFICATION.md](SPECIFICATION.md)** | Full technical specification: binding protocol, trust tiers, components, contracts, flows, threat model, conformance |
 | **[PLAN.md](PLAN.md)** | Phased implementation plan, spikes, work breakdown, risk register, milestones |
-| [docs/DEMO.md](docs/DEMO.md) | The scripted end-to-end scenario, including ten negative controls |
+| [docs/DEMO.md](docs/DEMO.md) | The scripted end-to-end scenario, including 18 negative controls |
 | [docs/RESEARCH-NOTES.md](docs/RESEARCH-NOTES.md) | Every upstream fact the design relies on, with citations |
 | [docs/adr/](docs/adr) | Architecture decision records |
 
@@ -164,18 +164,29 @@ Go 1.25+ · Foundry · Python 3.12 · Docker · Make
 ```bash
 make devnet-up     # Anvil ×2, Postgres, IPFS, Dex, SAM control plane + router, broker, indexer
 make demo          # the full narrated scenario
-make test-e2e      # scenario + all ten negative controls
+make test-e2e      # scenario + all 18 negative controls
 ```
 
 ---
 
 ## Licence and provenance
 
-SATM-authored code will be licensed per the repository's `LICENSE`. Upstream components retain
-theirs: Google SAM is Apache-2.0; the ERC-8004 registry contracts are CC0; ERC-8004 and ERC-8226
-specification text is CC0.
+SATM-authored work in this repository is licensed under **Apache-2.0** — see [LICENSE](LICENSE).
+Apache-2.0 was chosen for its express patent grant, which matters for a protocol specification
+others may implement, and because it is compatible with everything SATM builds on.
+
+Upstream components retain their own terms:
+
+| Component | Licence | How SATM uses it |
+| --- | --- | --- |
+| [Google SAM](https://github.com/google/sam) | Apache-2.0 | Consumed **unforked**, via documented HTTP and YAML seams ([ADR-0001](docs/adr/0001-integrate-via-control-plane-not-fork.md)). No SAM source is vendored. |
+| [ERC-8004 registry contracts](https://github.com/erc-8004/erc-8004-contracts) | CC0 | Vendored at a pinned commit ([ADR-0004](docs/adr/0004-foundry-with-vendored-registries.md)) |
+| ERC-8004 / ERC-8226 specification text | CC0 | Referenced, and implemented from |
+
+Third-party attributions are recorded in [NOTICE](NOTICE) as components are vendored.
 
 ERC-8226 is a **Draft** EIP with no public reference implementation. Per project direction it is
 treated as normative and assumed to be implemented; SATM implements it from the EIP text and
 backs it with a conformance suite containing one test per MUST clause
-([PLAN.md §6.2](PLAN.md)).
+([PLAN.md §6.2](PLAN.md)). SATM's own stricter additions are isolated in a separate extension
+suite so conformance and extensions are never conflated.

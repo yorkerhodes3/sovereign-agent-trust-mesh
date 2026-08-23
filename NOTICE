@@ -1,0 +1,40 @@
+Sovereign Agent Trust Mesh (SATM)
+Copyright 2026 Yorke E. Rhodes III
+
+This product includes software developed by Yorke E. Rhodes III.
+
+Licensed under the Apache License, Version 2.0. See the LICENSE file for the
+full terms.
+
+--------------------------------------------------------------------------------
+Third-party components
+--------------------------------------------------------------------------------
+
+SATM builds on the following upstream work. Each retains its own licence, and
+nothing here relicenses it. Attributions are added to this file as components
+are vendored into the tree.
+
+1. Google SAM ("Sovereign Agent Mesh")
+   https://github.com/google/sam
+   Licensed under the Apache License, Version 2.0.
+
+   Consumed unforked, through documented HTTP endpoints and sam-node.yaml
+   configuration only. No SAM source is vendored into this repository.
+   Note: upstream states it "is not an officially supported Google product."
+
+2. ERC-8004 Trustless Agents reference contracts
+   https://github.com/erc-8004/erc-8004-contracts
+   Released under CC0 1.0 Universal (public domain dedication).
+
+   Planned to be vendored at a pinned commit under contracts/vendor/erc8004/,
+   with the upstream CC0 notice retained. See
+   docs/adr/0004-foundry-with-vendored-registries.md.
+
+3. ERC-8004 and ERC-8226 specification text
+   https://ercs.ethereum.org/ERCS/erc-8004
+   https://eips.ethereum.org/EIPS/eip-8226
+   Copyright and related rights waived via CC0 1.0 Universal.
+
+   Interface definitions are reproduced from the specification text. ERC-8226
+   is a Draft EIP with no public reference implementation; SATM implements it
+   from the specification and marks its own additions explicitly.

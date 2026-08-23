@@ -395,7 +395,7 @@ part of the scripted demo:
 | Invariant | RAMS caps, freeze, role separation | `forge invariant` | Every PR |
 | Conformance | One test per ERC-8226 MUST clause; ERC-8004 behaviours | `forge test` | Every PR |
 | Integration | Broker ↔ control plane; indexer ↔ chain; sidecar ↔ node | Testcontainers + Anvil | Every PR |
-| E2E | Full scenario incl. all ten negative controls | `make test-e2e` on the compose devnet | Merge to main |
+| E2E | Full scenario incl. all 18 negative controls | `make test-e2e` on the compose devnet | Merge to main |
 | Chaos | RPC outage, reorg, broker outage, indexer lag, IPFS outage | `tests/chaos/` | Nightly |
 | Regression | **S-2 attenuation behaviour** | `tests/e2e/` | Every PR — this is our upstream-breakage tripwire |
 
@@ -435,7 +435,7 @@ is why it is scheduled in parallel from week 4.
 
 The prototype is complete when **all nine acceptance criteria** in
 [SPECIFICATION.md §16.1](SPECIFICATION.md) pass in CI on the local devnet **and** on testnet, and
-`make demo` runs the full narrated scenario — happy path plus all ten negative controls — without
+`make demo` runs the full narrated scenario — happy path plus all 18 negative controls — without
 manual intervention.
 
 The narrative the demo must support, end to end:
