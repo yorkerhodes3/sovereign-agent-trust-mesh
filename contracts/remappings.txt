@@ -1,0 +1,5 @@
+@openzeppelin/contracts-upgradeable/=dependencies/@openzeppelin-contracts-upgradeable-5.1.0/
+@openzeppelin/contracts/=dependencies/@openzeppelin-contracts-5.1.0/
+erc8004/=vendor/erc8004/
+satm/=src/
+forge-std/=dependencies/forge-std-1.9.4/src/

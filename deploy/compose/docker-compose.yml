@@ -1,0 +1,155 @@
+# SATM local devnet.
+#
+# ============================== STATUS =====================================
+# UNVERIFIED. Authored in Phase 0 but NOT yet executed: the development machine
+# used for Phase 0 has no Docker. Everything below is derived from the SAM docs
+# and the component defaults, not from a run that succeeded.
+#
+# Treat the SAM service definitions in particular as a first draft. Phase 1
+# spike S-1 is the first task that actually exercises them, and it is expected
+# to correct this file rather than confirm it.
+#
+# What IS verified in Phase 0 is the chain + contract layer, which needs no
+# Docker. Use `make devnet-chains` / `.\make.ps1 devnet-up` for that subset.
+# ===========================================================================
+#
+# Roles:
+#   anvil-l2   stands in for the settlement/identity L2 (Base Sepolia in testnet runs)
+#   anvil-l1   stands in for the audit L1 (Ethereum Sepolia in testnet runs)
+#
+# Two separate chains are deliberate, not incidental: the audit plane MUST be a
+# different chain from the settlement plane, or anchoring proves nothing about
+# censorship resistance (SPECIFICATION.md 12.3).
+
+name: satm-devnet
+
+services:
+  # ----------------------------------------------------------------- chains --
+  anvil-l2:
+    image: ghcr.io/foundry-rs/foundry:latest
+    entrypoint: ["anvil"]
+    command:
+      - --host=0.0.0.0
+      - --port=8545
+      - --chain-id=31337
+      - --block-time=2
+    ports: ["8545:8545"]
+    healthcheck:
+      test:
+        - CMD
+        - cast
+        - block-number
+        - --rpc-url
+        - http://127.0.0.1:8545
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  anvil-l1:
+    image: ghcr.io/foundry-rs/foundry:latest
+    entrypoint: ["anvil"]
+    command:
+      - --host=0.0.0.0
+      - --port=8545
+      - --chain-id=31338
+      # Slower blocks: L1 is intentionally the unhurried, credibly-neutral plane.
+      - --block-time=12
+    ports: ["8546:8545"]
+    healthcheck:
+      test:
+        - CMD
+        - cast
+        - block-number
+        - --rpc-url
+        - http://127.0.0.1:8545
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  # ------------------------------------------------------------- trust store --
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: satm
+      POSTGRES_PASSWORD: satm-devnet-only
+      POSTGRES_DB: satm
+    ports: ["5432:5432"]
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U satm -d satm"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  # ------------------------------------------------------------------- ipfs --
+  # Hosts agent registration files and evidence batches. Binding verification
+  # (check B10) fetches from here on the devnet.
+  ipfs:
+    image: ipfs/kubo:latest
+    ports:
+      - "5001:5001" # API
+      - "8080:8080" # gateway
+    volumes:
+      - ipfs-data:/data/ipfs
+    healthcheck:
+      test: ["CMD", "ipfs", "id"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  # ------------------------------------------------------------------- OIDC --
+  # SAM's control plane authenticates enrollment via OIDC. Dex is the local
+  # stand-in for a corporate IdP.
+  dex:
+    image: dexidp/dex:latest
+    command: ["dex", "serve", "/etc/dex/config.yaml"]
+    ports: ["5556:5556"]
+    volumes:
+      - ../config/dex.yaml:/etc/dex/config.yaml:ro
+
+  # --------------------------------------------------------- SAM mesh plane --
+  # CRITICAL: --auto-approve-enrollment=false is not optional. The SATM broker
+  # IS the enrollment gate; with auto-approval on, any valid OIDC identity joins
+  # the mesh unbound and the entire admission control story collapses.
+  # See SPECIFICATION.md 6.1.2 and ADR-0001.
+  sam-control-plane:
+    image: ghcr.io/google/sam-control-plane:latest
+    command:
+      - --bind-address=0.0.0.0:8080
+      - --issuer=http://dex:5556
+      - --allowed-audiences=satm-devnet
+      - --auto-approve-enrollment=false
+      - --admin-token-path=/etc/satm/admin-token
+    ports: ["8081:8080"]
+    depends_on:
+      dex:
+        condition: service_started
+    volumes:
+      - ../config/cp-admin-token:/etc/satm/admin-token:ro
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  sam-router:
+    image: ghcr.io/google/sam-router:latest
+    command:
+      - --control-plane=http://sam-control-plane:8080
+      - --listen=/ip4/0.0.0.0/tcp/4501
+      - --listen=/ip4/0.0.0.0/udp/4501/quic-v1
+      - --keys-path=/data/router.key
+    ports:
+      - "4501:4501/tcp"
+      - "4501:4501/udp"
+    depends_on:
+      sam-control-plane:
+        condition: service_healthy
+    volumes:
+      - router-data:/data
+
+volumes:
+  postgres-data:
+  ipfs-data:
+  router-data:

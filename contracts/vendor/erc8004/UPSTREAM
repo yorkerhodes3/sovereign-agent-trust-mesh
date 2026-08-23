@@ -1,0 +1,39 @@
+Vendored ERC-8004 reference contracts
+=====================================
+
+These files are a VERBATIM copy of upstream. Do not edit them.
+
+If SATM needs different behaviour, extend or wrap in `contracts/src/` instead.
+CI enforces this: `.github/workflows/contracts.yml` re-fetches each file at the
+pinned commit and fails the build on any diff.
+
+source:  https://github.com/erc-8004/erc-8004-contracts
+commit:  b9e466c250744a7e06b13dff9d3c2844ed64f825
+date:    2026-08-15T16:26:49Z
+license: CC0 1.0 Universal (public domain dedication)
+
+Files
+-----
+  IdentityRegistryUpgradeable.sol     ERC-721 agent registry, agentWallet, metadata
+  ReputationRegistryUpgradeable.sol   feedback, revocation, summaries
+  ValidationRegistryUpgradeable.sol   validation request/response
+  ERC1967Proxy.sol                    proxy used by the deployment pattern
+  MinimalUUPS.sol                     upstream bootstrap implementation
+
+Why MinimalUUPS is present but unused
+-------------------------------------
+Upstream's bootstrap hard-codes the proxy owner to a single address for their
+vanity-address deployment scheme, which is unusable on an ephemeral devnet or in
+CI. SATM uses `src/bootstrap/SatmBootstrapUUPS.sol` instead, which is equivalent
+in storage layout but takes the owner as a parameter. MinimalUUPS is vendored
+anyway so the deployment pattern can be diffed against the original.
+
+Notes for future updates
+------------------------
+1. Bump `commit:` above, re-fetch all five files, run `forge test`.
+2. `ReputationRegistryUpgradeable.giveFeedback` takes 8 parameters and hits
+   "stack too deep" under legacy codegen. `via_ir = true` in foundry.toml is
+   REQUIRED, not a preference.
+3. The Validation Registry has no canonical deployment and the ERC authors flag
+   that section as still under revision with the TEE community. Expect this file
+   to change more than the other two, and keep use of it behind a port.

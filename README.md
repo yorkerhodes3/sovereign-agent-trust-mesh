@@ -135,11 +135,40 @@ A trust prototype that only demonstrates the happy path proves nothing.
 
 ## Status
 
-**Specification and plan complete. Implementation not started.**
+**Phase 0 (Foundations) in progress.** The contract layer is real and verified;
+the mesh layer is authored but not yet executed.
 
-See [PLAN.md §11](PLAN.md) for milestones. Phase 1 spikes must close before Phase 2 begins —
-three upstream behaviours are read from source but not yet empirically verified, and they are
-tracked as open issues rather than assumed.
+| Component | State |
+| --- | --- |
+| Specification, plan, ADRs | Complete |
+| Foundry project + vendored ERC-8004 registries | **Working — 18/18 tests pass** |
+| ERC-8226 interfaces (verbatim) + SATM extension interfaces | Compiling |
+| Registry deployment to a live chain | **Verified on anvil** |
+| CI (Solidity build/test/lint + vendor integrity) | Authored, runs on push |
+| Devnet compose (Postgres, IPFS, Dex, SAM) | **Authored, UNVERIFIED — needs Docker** |
+| Broker, indexer, sidecar, agents | Not started (Phases 2–5) |
+
+What "verified" means here: `forge test` passes 18 tests against the **real**
+vendored registries, and those registries were deployed to a live Anvil node and
+answered calls. What it does not mean: nothing involving SAM has been run, because
+this machine has no Go and no Docker.
+
+See [contracts/README.md](contracts/README.md) for the detail, and [PLAN.md §11](PLAN.md)
+for milestones. Phase 1 spikes must close before Phase 2 begins — five upstream
+behaviours are read from source but not yet empirically confirmed.
+
+### The one result worth reading
+
+`test_agentWallet_isClearedOnTransfer` passes. Threat TH-5 and negative control
+N-7 both rest on ERC-8004 clearing `agentWallet` when an agent NFT is transferred,
+and [ADR-0003](docs/adr/0003-agentwallet-is-the-rams-agent-address.md) calls that
+behaviour "free". It is only free if it is real — now it is checked on every build
+rather than asserted in prose.
+
+The companion test proves the opposite kind of thing: an attacker who registers
+three of their own agents *does* satisfy a distinct-client minimum with a
+fabricated perfect score. That is why the reviewer allow-list is curated rather
+than counted.
 
 ---
 
@@ -157,14 +186,34 @@ tracked as open issues rather than assumed.
 
 ---
 
-## Prerequisites (once implementation starts)
+## Prerequisites
 
-Go 1.25+ · Foundry · Python 3.12 · Docker · Make
+Go 1.25+ · Foundry · Python 3.12 · Docker · Make (see [.tool-versions](.tool-versions))
+
+Phase 0's contract work needs **only Foundry**:
 
 ```bash
-make devnet-up     # Anvil ×2, Postgres, IPFS, Dex, SAM control plane + router, broker, indexer
-make demo          # the full narrated scenario
-make test-e2e      # scenario + all 18 negative controls
+cd contracts && forge soldeer install && forge test
+```
+
+Or from the repository root — `make` on Unix, `make.ps1` on Windows, same targets:
+
+```bash
+make test            # contract suite
+make devnet-up       # both anvil chains + deployed registries
+make verify-vendor   # confirm vendor/ matches the pinned upstream commit
+make ci              # everything CI runs
+```
+
+```powershell
+.\make.ps1 test      # Windows equivalent — `make` is rarely installed there
+```
+
+The full devnet (Postgres, IPFS, Dex, SAM control plane and router) additionally
+needs Docker and lands with Phase 1:
+
+```bash
+docker compose -f deploy/compose/docker-compose.yml up -d
 ```
 
 ---

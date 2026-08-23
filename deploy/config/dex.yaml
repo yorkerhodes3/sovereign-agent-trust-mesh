@@ -1,0 +1,53 @@
+# Dex configuration for the SATM local devnet.
+#
+# DEVNET ONLY. Static passwords and a fixed client secret are fine here and
+# nowhere else. In a real deployment Dex federates to a corporate IdP and the
+# secret comes from a secret manager.
+#
+# Dex is the OIDC issuer that SAM's control plane verifies enrollment tokens
+# against. It establishes *who the operator is*; it says nothing about whether
+# the agent is registered on-chain. That second question is the SATM broker's
+# job, and the two must not be conflated -- a valid OIDC identity is necessary
+# for mesh admission but nowhere near sufficient (SPECIFICATION.md 6.1.2).
+
+issuer: http://dex:5556
+
+storage:
+  type: memory
+
+web:
+  http: 0.0.0.0:5556
+
+oauth2:
+  # Skip the consent screen so headless devnet enrollment does not hang.
+  skipApprovalScreen: true
+
+staticClients:
+  - id: satm-devnet
+    name: SATM Devnet
+    secret: satm-devnet-client-secret
+    redirectURIs:
+      - http://127.0.0.1:8080/callback
+      - http://localhost:8080/callback
+      - http://sam-control-plane:8080/callback
+
+enablePasswordDB: true
+
+# Three operators, one per demo organisation. Mirrors docs/DEMO.md so the
+# scenario can be driven end to end without inventing identities.
+staticPasswords:
+  # password: devnet
+  - email: atlas@acme.example
+    hash: "$2a$10$2b2cU8CPhOTaGrs1HRQuAueS7JTT5ZHsHSzYiFPm1leZck7Mc8T4W"
+    username: atlas
+    userID: "00000000-0000-0000-0000-00000000a71a"
+
+  - email: vault@bellwether.example
+    hash: "$2a$10$2b2cU8CPhOTaGrs1HRQuAueS7JTT5ZHsHSzYiFPm1leZck7Mc8T4W"
+    username: vault
+    userID: "00000000-0000-0000-0000-00000000vau1"
+
+  - email: auditor@cirrus.example
+    hash: "$2a$10$2b2cU8CPhOTaGrs1HRQuAueS7JTT5ZHsHSzYiFPm1leZck7Mc8T4W"
+    username: auditor
+    userID: "00000000-0000-0000-0000-0000000aud17"

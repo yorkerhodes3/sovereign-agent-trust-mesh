@@ -6,6 +6,9 @@
 *.pem
 secrets/
 satm-broker.local.yaml
+# The control-plane admin token grants enrollment approve/reject. Never commit it.
+deploy/config/cp-admin-token
+!deploy/config/cp-admin-token.example
 
 # --- Node (docs tooling, e.g. mermaid-cli) -------------------------------------
 node_modules/
@@ -17,6 +20,12 @@ contracts/out/
 contracts/cache/
 contracts/broadcast/
 contracts/lib/
+# soldeer restores these from soldeer.lock; the lockfile IS committed.
+contracts/dependencies/
+# Local devnet deployment records are ephemeral (anvil chain ids).
+# Real testnet/mainnet records SHOULD be committed.
+contracts/deployments/31337.json
+contracts/deployments/31338.json
 !contracts/vendor/
 
 # --- Go ------------------------------------------------------------------------

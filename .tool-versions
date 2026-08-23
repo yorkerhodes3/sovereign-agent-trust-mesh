@@ -1,0 +1,15 @@
+# Toolchain pins for SATM. Consumed by asdf/mise; CI mirrors these exactly.
+#
+# Go 1.25 is what google/sam requires (its go.mod sets `go 1.25`). SATM's own Go
+# services target the same version so a single toolchain builds both.
+golang 1.25.0
+
+# Foundry: contracts are built and tested with forge/cast/anvil.
+# Pinned because via_ir codegen differs across releases and we compare gas.
+foundry 1.7.1
+
+# Agents are Python (google/sam ships sam-mcp-python).
+python 3.12.10
+
+# Node is only needed for docs tooling (mermaid-cli) and npx-launched MCP servers.
+nodejs 24.14.0
