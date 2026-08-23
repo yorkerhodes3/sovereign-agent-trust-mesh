@@ -89,6 +89,37 @@ func castPath(t *testing.T) string {
 	return p
 }
 
+// runCast executes a cast subcommand and returns STDOUT only.
+//
+// CombinedOutput would be wrong here: foundry writes advisory notices (such as
+// the nightly-build warning) to stderr, and mixing those into a value that gets
+// parsed makes the test fail for reasons unrelated to what it is testing.
+func runCast(t *testing.T, args ...string) string {
+	t.Helper()
+	cmd := exec.Command(castPath(t), args...)
+	cmd.Env = append(os.Environ(), "FOUNDRY_DISABLE_NIGHTLY_WARNING=1")
+
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("cast %s: %v\nstderr: %s", strings.Join(args, " "), err, stderr.String())
+	}
+	return string(out)
+}
+
+// lastNonEmptyLine returns the final meaningful line of command output, which is
+// where cast puts the actual return value.
+func lastNonEmptyLine(s string) string {
+	lines := strings.Split(strings.ReplaceAll(s, "\r\n", "\n"), "\n")
+	for i := len(lines) - 1; i >= 0; i-- {
+		if trimmed := strings.TrimSpace(lines[i]); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
+}
+
 // registerAgent registers an agent whose tokenURI is a data: URI carrying the
 // registration file.
 //
@@ -98,19 +129,16 @@ func castPath(t *testing.T) string {
 // the next call will assign, build the file around it, then send for real.
 func registerAgent(t *testing.T, registry, peerID string) *big.Int {
 	t.Helper()
-	cast := castPath(t)
 
 	// Step 1: eth_call register() to learn the id without changing state.
-	out, err := exec.Command(cast, "call", registry,
+	out := runCast(t, "call", registry,
 		"register(string)(uint256)", "placeholder",
-		"--rpc-url", rpcURL(), "--from", anvilAddr).CombinedOutput()
-	if err != nil {
-		t.Fatalf("cast call register: %v\n%s", err, out)
-	}
-	idStr := strings.Fields(strings.TrimSpace(string(out)))[0]
+		"--rpc-url", rpcURL(), "--from", anvilAddr)
+
+	idStr := lastNonEmptyLine(out)
 	agentID, ok := new(big.Int).SetString(idStr, 10)
 	if !ok {
-		t.Fatalf("could not parse predicted agentId from %q", string(out))
+		t.Fatalf("could not parse predicted agentId from %q (last line %q)", out, idStr)
 	}
 
 	// Step 2: build the registration file naming that id and this peer.
@@ -133,12 +161,9 @@ func registerAgent(t *testing.T, registry, peerID string) *big.Int {
 	dataURI := "data:application/json;base64," + base64.StdEncoding.EncodeToString(encoded)
 
 	// Step 3: register for real.
-	out, err = exec.Command(cast, "send", registry,
+	runCast(t, "send", registry,
 		"register(string)", dataURI,
-		"--rpc-url", rpcURL(), "--private-key", anvilPK).CombinedOutput()
-	if err != nil {
-		t.Fatalf("cast send register: %v\n%s", err, out)
-	}
+		"--rpc-url", rpcURL(), "--private-key", anvilPK)
 	return agentID
 }
 
