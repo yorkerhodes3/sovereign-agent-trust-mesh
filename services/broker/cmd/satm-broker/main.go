@@ -85,6 +85,7 @@ func run() error {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /v1/bindings", srv.handleCreateBinding)
+	mux.HandleFunc("GET /v1/bindings/by-id/{id}", srv.handleGetBindingByID)
 	mux.HandleFunc("GET /v1/bindings/{caid...}", srv.handleGetBinding)
 	mux.HandleFunc("GET /healthz", srv.handleHealth)
 
@@ -159,6 +160,21 @@ type errorResponse struct {
 	Detail string `json:"detail,omitempty"`
 }
 
+// bindingByIDResponse is the Trust API shape the sidecar consumes for
+// attestation checks V5 and V6.
+//
+// It carries `active` rather than omitting superseded bindings, because
+// "your binding was replaced" and "no such binding" are different conditions
+// that deserve different denials.
+type bindingByIDResponse struct {
+	ID         string `json:"id"`
+	CAID       string `json:"caid"`
+	PeerID     string `json:"peerId"`
+	MeshID     string `json:"meshId"`
+	SidecarKey string `json:"sidecarKey"`
+	Active     bool   `json:"active"`
+}
+
 func (s *server) handleCreateBinding(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(io.LimitReader(r.Body, maxRequestBytes+1))
 	if err != nil {
@@ -215,6 +231,29 @@ func (s *server) handleCreateBinding(w http.ResponseWriter, r *http.Request) {
 		DomainVerified: result.DomainVerified,
 		IssuedAt:       rec.IssuedAt,
 		ExpiresAt:      rec.ExpiresAt,
+	})
+}
+
+// handleGetBindingByID serves the Trust API lookup the sidecar uses for
+// attestation checks V5 and V6.
+func (s *server) handleGetBindingByID(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		writeError(w, http.StatusBadRequest, "malformed", "binding id is required")
+		return
+	}
+	rec, active, found := s.store.ByID(r.Context(), id)
+	if !found {
+		writeError(w, http.StatusNotFound, "not_found", "no such binding")
+		return
+	}
+	writeJSON(w, http.StatusOK, bindingByIDResponse{
+		ID:         rec.ID,
+		CAID:       rec.CAID,
+		PeerID:     rec.PeerID,
+		MeshID:     rec.MeshID,
+		SidecarKey: rec.SidecarKey,
+		Active:     active,
 	})
 }
 

@@ -53,7 +53,7 @@ at the numbered check it defends.
 ## Tests that need real infrastructure
 
 Two build-tagged suites run against live services. Both execute in CI
-([.github/workflows/broker.yml](../../.github/workflows/broker.yml)).
+([.github/workflows/services.yml](../../.github/workflows/services.yml)).
 
 ```bash
 # Live chain: needs anvil + the registries deployed (see contracts/)

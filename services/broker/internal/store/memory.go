@@ -29,6 +29,13 @@ type Memory struct {
 	// active maps CAID -> the currently live record.
 	active map[string]*binding.Record
 
+	// byID indexes every record ever committed, live or not.
+	//
+	// Superseded records stay resolvable on purpose: attestation check V6 needs
+	// to distinguish "this binding was replaced" from "no such binding", and the
+	// first deserves a specific denial rather than a generic one.
+	byID map[string]*binding.Record
+
 	// walletToCAID supports the B9a uniqueness check.
 	walletToCAID map[string]string
 
@@ -43,6 +50,7 @@ func NewMemory() *Memory {
 	return &Memory{
 		nonces:       map[string]time.Time{},
 		active:       map[string]*binding.Record{},
+		byID:         map[string]*binding.Record{},
 		walletToCAID: map[string]string{},
 	}
 }
@@ -85,8 +93,30 @@ func (m *Memory) Commit(_ context.Context, r *binding.Record) error {
 
 	stored := *r // copy so a caller mutating its Record cannot alter committed state
 	m.active[r.CAID] = &stored
+	m.byID[r.ID] = &stored
 	m.walletToCAID[r.AgentWallet] = r.CAID
 	return nil
+}
+
+// ByID resolves a binding by its record id and reports whether it is still the
+// active binding for its agent.
+//
+// Used by attestation check V6. Returning superseded records rather than hiding
+// them is deliberate: "your binding was replaced" and "no such binding" call for
+// different operator responses, and collapsing them loses that signal.
+func (m *Memory) ByID(_ context.Context, bindingID string) (rec *binding.Record, active bool, found bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	r, ok := m.byID[bindingID]
+	if !ok {
+		return nil, false, false
+	}
+	current, ok := m.active[r.CAID]
+	isActive := ok && current.ID == bindingID
+
+	copied := *r
+	return &copied, isActive, true
 }
 
 // ActiveByWallet implements check B9a.

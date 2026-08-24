@@ -1,4 +1,4 @@
-package binding
+package canonicaljson
 
 import (
 	"bytes"
@@ -11,7 +11,7 @@ import (
 	"unicode/utf8"
 )
 
-// CanonicalJSON serialises v per RFC 8785 (JSON Canonicalization Scheme).
+// Encode serialises v per RFC 8785 (JSON Canonicalization Scheme).
 //
 // Why this is hand-rolled rather than encoding/json:
 //
@@ -32,7 +32,7 @@ import (
 // The first two matter for our documents today; the third is guarded against by
 // rejecting non-integer numbers outright (see below), because binding documents
 // carry every numeric value as a string precisely to avoid that problem.
-func CanonicalJSON(v any) ([]byte, error) {
+func Encode(v any) ([]byte, error) {
 	var buf bytes.Buffer
 	if err := writeCanonical(&buf, v); err != nil {
 		return nil, err

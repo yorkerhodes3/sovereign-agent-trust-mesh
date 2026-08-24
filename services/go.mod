@@ -1,4 +1,4 @@
-module github.com/yorkerhodes3/sovereign-agent-trust-mesh/services/broker
+module github.com/yorkerhodes3/sovereign-agent-trust-mesh/services
 
 go 1.25.14
 

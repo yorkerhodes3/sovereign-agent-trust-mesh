@@ -25,6 +25,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/yorkerhodes3/sovereign-agent-trust-mesh/services/internal/canonicaljson"
 )
 
 // DocumentType is the schema identifier carried in every binding document.
@@ -219,7 +221,7 @@ func (d *Document) Canonicalize() ([]byte, error) {
 	if err := dec.Decode(&generic); err != nil {
 		return nil, fmt.Errorf("normalize document: %w", err)
 	}
-	return CanonicalJSON(generic)
+	return canonicaljson.Encode(generic)
 }
 
 // Parse decodes and structurally validates a binding document.

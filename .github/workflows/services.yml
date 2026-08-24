@@ -1,4 +1,4 @@
-name: broker
+name: services
 
 # Go CI for the SATM broker. Mirrors the contracts workflow: path-filtered so
 # doc-only commits do not burn runner minutes, and locked dependencies so a
@@ -8,23 +8,23 @@ on:
   push:
     branches: [main]
     paths:
-      - "services/broker/**"
+      - "services/**"
       - "contracts/**"
-      - ".github/workflows/broker.yml"
+      - ".github/workflows/services.yml"
   pull_request:
     paths:
-      - "services/broker/**"
+      - "services/**"
       - "contracts/**"
-      - ".github/workflows/broker.yml"
+      - ".github/workflows/services.yml"
   workflow_dispatch:
 
 concurrency:
-  group: broker-${{ github.ref }}
+  group: services-${{ github.ref }}
   cancel-in-progress: true
 
 defaults:
   run:
-    working-directory: services/broker
+    working-directory: services
 
 jobs:
   build-and-test:
@@ -37,8 +37,8 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version-file: services/broker/go.mod
-          cache-dependency-path: services/broker/go.sum
+          go-version-file: services/go.mod
+          cache-dependency-path: services/go.sum
 
       - name: Verify go.mod and go.sum are tidy
         run: |
@@ -114,8 +114,8 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version-file: services/broker/go.mod
-          cache-dependency-path: services/broker/go.sum
+          go-version-file: services/go.mod
+          cache-dependency-path: services/go.sum
 
       - name: Run NonceStore conformance suite against PostgreSQL
         run: go test -tags postgres -race -count=1 -v ./internal/pgstore/
@@ -138,8 +138,8 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version-file: services/broker/go.mod
-          cache-dependency-path: services/broker/go.sum
+          go-version-file: services/go.mod
+          cache-dependency-path: services/go.sum
 
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
