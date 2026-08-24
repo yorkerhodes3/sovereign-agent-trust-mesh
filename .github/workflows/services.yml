@@ -118,7 +118,7 @@ jobs:
           cache-dependency-path: services/go.sum
 
       - name: Run NonceStore conformance suite against PostgreSQL
-        run: go test -tags postgres -race -count=1 -v ./internal/pgstore/
+        run: go test -tags postgres -race -count=1 -v ./broker/internal/pgstore/
         env:
           CGO_ENABLED: 1
           SATM_POSTGRES_DSN: postgres://satm:satm@localhost:5432/satm?sslmode=disable
@@ -185,11 +185,14 @@ jobs:
             --private-key "$PRIVATE_KEY" --skip-simulation
 
       - name: Chain client against live registries
-        run: go test -tags integration -race -count=1 -v -run TestLive ./internal/chainrpc/
+        run: go test -tags integration -race -count=1 -v -run TestLive ./broker/internal/chainrpc/
         env:
           CGO_ENABLED: 1
 
-      - name: Broker end-to-end
-        run: go test -tags integration -race -count=1 -v -run TestE2E ./cmd/satm-broker/
+      # Covers the end-to-end binding pipeline AND the reconciliation loop,
+      # including PLAN.md exit criterion 3: transferring the agent NFT on-chain
+      # revokes mesh access on the next sweep.
+      - name: Broker end-to-end and reconciliation
+        run: go test -tags integration -race -count=1 -v -run 'TestE2E|TestLive' ./broker/cmd/satm-broker/
         env:
           CGO_ENABLED: 1

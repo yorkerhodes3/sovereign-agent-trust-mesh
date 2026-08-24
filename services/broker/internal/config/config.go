@@ -63,7 +63,16 @@ type BindingConfig struct {
 	TrustedRegistries        []string      `yaml:"trustedRegistries"`
 	RequireUniqueAgentWallet bool          `yaml:"requireUniqueAgentWallet"`
 	OneActiveBindingPerAgent bool          `yaml:"oneActiveBindingPerAgent"`
-	Fetch                    FetchConfig   `yaml:"fetch"`
+
+	// ReconcileInterval is the upper bound on how long a sold or de-listed agent
+	// retains mesh access, so it is a security parameter rather than a tuning
+	// knob.
+	ReconcileInterval time.Duration `yaml:"reconcileInterval"`
+
+	// ReconcileDryRun reports what would be revoked without revoking it.
+	ReconcileDryRun bool `yaml:"reconcileDryRun"`
+
+	Fetch FetchConfig `yaml:"fetch"`
 }
 
 // FetchConfig mirrors fetch.Config.
@@ -118,6 +127,9 @@ func (c *Config) applyDefaults() {
 	}
 	if c.Chains.Identity.Confirmations == 0 {
 		c.Chains.Identity.Confirmations = 5
+	}
+	if c.Binding.ReconcileInterval == 0 {
+		c.Binding.ReconcileInterval = time.Minute
 	}
 
 	d := fetch.DefaultConfig()
@@ -186,6 +198,10 @@ func (c *Config) Validate() error {
 	}
 	if c.Binding.Fetch.MaxBytes <= 0 {
 		return fmt.Errorf("config: binding.fetch.maxBytes must be positive")
+	}
+	if c.Binding.ReconcileInterval <= 0 {
+		return fmt.Errorf("config: binding.reconcileInterval must be positive; " +
+			"it bounds how long a sold agent retains mesh access (TH-5)")
 	}
 	return nil
 }

@@ -98,11 +98,7 @@ func newHarness(t *testing.T) *harness {
 		log:      slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError})),
 	}
 
-	mux := http.NewServeMux()
-	mux.HandleFunc("POST /v1/authorize", srv.handleAuthorize)
-	mux.HandleFunc("GET /healthz", srv.handleHealth)
-
-	h.ts = httptest.NewServer(mux)
+	h.ts = httptest.NewServer(srv.routes())
 	t.Cleanup(h.ts.Close)
 	return h
 }
@@ -376,9 +372,7 @@ func TestInboundBrokerOutageReturns503(t *testing.T) {
 		meshID: testMesh, cp: testCP, ttl: 30 * time.Second,
 		log: slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError})),
 	}
-	mux := http.NewServeMux()
-	mux.HandleFunc("POST /v1/authorize", srv.handleAuthorize)
-	ts := httptest.NewServer(mux)
+	ts := httptest.NewServer(srv.routes())
 	defer ts.Close()
 
 	body := mustJSON(t, map[string]any{

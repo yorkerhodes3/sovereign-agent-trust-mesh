@@ -25,6 +25,7 @@ import (
 	"github.com/yorkerhodes3/sovereign-agent-trust-mesh/services/broker/internal/chainrpc"
 	"github.com/yorkerhodes3/sovereign-agent-trust-mesh/services/broker/internal/config"
 	"github.com/yorkerhodes3/sovereign-agent-trust-mesh/services/broker/internal/fetch"
+	"github.com/yorkerhodes3/sovereign-agent-trust-mesh/services/broker/internal/reconcile"
 	"github.com/yorkerhodes3/sovereign-agent-trust-mesh/services/broker/internal/store"
 )
 
@@ -81,17 +82,22 @@ func run() error {
 		return err
 	}
 
-	srv := &server{verifier: verifier, store: nonceStore, log: logger, cfg: cfg}
+	// The reconciler is what makes a binding revocable rather than permanent.
+	// Without it a sold agent keeps mesh access until its Biscuit expires, which
+	// is exactly the gap SATM exists to close (TH-5, TH-16).
+	reconcileCfg := reconcile.DefaultConfig()
+	reconcileCfg.Interval = cfg.Binding.ReconcileInterval
+	reconcileCfg.DryRun = cfg.Binding.ReconcileDryRun
+	reconciler, err := reconcile.New(reconcileCfg, nonceStore, verifier, nil, logger)
+	if err != nil {
+		return err
+	}
 
-	mux := http.NewServeMux()
-	mux.HandleFunc("POST /v1/bindings", srv.handleCreateBinding)
-	mux.HandleFunc("GET /v1/bindings/by-id/{id}", srv.handleGetBindingByID)
-	mux.HandleFunc("GET /v1/bindings/{caid...}", srv.handleGetBinding)
-	mux.HandleFunc("GET /healthz", srv.handleHealth)
+	srv := &server{verifier: verifier, store: nonceStore, log: logger, cfg: cfg}
 
 	httpSrv := &http.Server{
 		Addr:              cfg.Listen,
-		Handler:           mux,
+		Handler:           srv.routes(),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,
 		WriteTimeout:      30 * time.Second,
@@ -100,6 +106,12 @@ func run() error {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+
+	go func() {
+		if err := reconciler.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
+			logger.Error("reconciler stopped", "err", err)
+		}
+	}()
 
 	errCh := make(chan error, 1)
 	go func() {
@@ -173,6 +185,23 @@ type bindingByIDResponse struct {
 	MeshID     string `json:"meshId"`
 	SidecarKey string `json:"sidecarKey"`
 	Active     bool   `json:"active"`
+}
+
+// routes returns the broker's HTTP surface.
+//
+// Defined once and used by both main and the tests. An earlier version
+// duplicated this in the test harness, and the two promptly drifted: a route
+// added to main was invisible to the end-to-end tests, so a working endpoint
+// looked broken.
+func (s *server) routes() http.Handler {
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /v1/bindings", s.handleCreateBinding)
+	// The by-id route is registered BEFORE the catch-all so it is not shadowed:
+	// {caid...} would otherwise swallow "by-id/...".
+	mux.HandleFunc("GET /v1/bindings/by-id/{id}", s.handleGetBindingByID)
+	mux.HandleFunc("GET /v1/bindings/{caid...}", s.handleGetBinding)
+	mux.HandleFunc("GET /healthz", s.handleHealth)
+	return mux
 }
 
 func (s *server) handleCreateBinding(w http.ResponseWriter, r *http.Request) {

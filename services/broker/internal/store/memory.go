@@ -41,6 +41,10 @@ type Memory struct {
 
 	// revoked keeps superseded records for audit.
 	revoked []*binding.Record
+
+	// revocationReasons records WHY a binding was retired, which is what an
+	// operator actually needs when an agent stops working.
+	revocationReasons map[string]string
 }
 
 var _ binding.NonceStore = (*Memory)(nil)
@@ -48,10 +52,11 @@ var _ binding.NonceStore = (*Memory)(nil)
 // NewMemory returns an empty in-memory store.
 func NewMemory() *Memory {
 	return &Memory{
-		nonces:       map[string]time.Time{},
-		active:       map[string]*binding.Record{},
-		byID:         map[string]*binding.Record{},
-		walletToCAID: map[string]string{},
+		nonces:            map[string]time.Time{},
+		active:            map[string]*binding.Record{},
+		byID:              map[string]*binding.Record{},
+		walletToCAID:      map[string]string{},
+		revocationReasons: map[string]string{},
 	}
 }
 
@@ -145,4 +150,59 @@ func (m *Memory) RevokedCount() int {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return len(m.revoked)
+}
+
+// ActiveRecords returns a snapshot of every live binding.
+//
+// Returns copies, and holds the lock only for the duration of the copy: the
+// reconciler makes chain and HTTP calls per record, and holding a store lock
+// across network I/O would stall every concurrent binding submission.
+func (m *Memory) ActiveRecords(_ context.Context) ([]*binding.Record, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	out := make([]*binding.Record, 0, len(m.active))
+	for _, r := range m.active {
+		copied := *r
+		out = append(out, &copied)
+	}
+	return out, nil
+}
+
+// Revoke retires a binding by id.
+//
+// The nonce is NOT released. A revoked binding's document is still a validly
+// signed document, so recycling its nonce would make it replayable -- the agent
+// could re-admit itself with the very document that was just revoked.
+func (m *Memory) Revoke(_ context.Context, bindingID, reason string) (bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	rec, ok := m.byID[bindingID]
+	if !ok {
+		return false, nil
+	}
+	current, isActive := m.active[rec.CAID]
+	if !isActive || current.ID != bindingID {
+		// Already superseded or revoked. Idempotent by design: the reconciler
+		// may race with a re-bind, and a spurious error there would look like a
+		// reconciliation failure rather than a no-op.
+		return false, nil
+	}
+
+	delete(m.active, rec.CAID)
+	if m.walletToCAID[rec.AgentWallet] == rec.CAID {
+		delete(m.walletToCAID, rec.AgentWallet)
+	}
+	m.revoked = append(m.revoked, current)
+	m.revocationReasons[bindingID] = reason
+	return true, nil
+}
+
+// RevocationReason returns why a binding was revoked, if it was.
+func (m *Memory) RevocationReason(bindingID string) (string, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	r, ok := m.revocationReasons[bindingID]
+	return r, ok
 }

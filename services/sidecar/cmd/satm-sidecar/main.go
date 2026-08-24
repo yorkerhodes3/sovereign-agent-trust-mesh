@@ -99,13 +99,9 @@ func run() error {
 		log:      logger,
 	}
 
-	mux := http.NewServeMux()
-	mux.HandleFunc("POST /v1/authorize", srv.handleAuthorize)
-	mux.HandleFunc("GET /healthz", srv.handleHealth)
-
 	httpSrv := &http.Server{
 		Addr:              *listenAddr,
-		Handler:           mux,
+		Handler:           srv.routes(),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,
 		WriteTimeout:      30 * time.Second,
@@ -231,6 +227,16 @@ type authorizeResponse struct {
 
 	// Outbound: the attestation to attach to the onward MCP call.
 	Attestation string `json:"attestation,omitempty"`
+}
+
+// routes returns the sidecar's HTTP surface.
+//
+// Defined once and shared with the tests so the two cannot drift.
+func (s *server) routes() http.Handler {
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /v1/authorize", s.handleAuthorize)
+	mux.HandleFunc("GET /healthz", s.handleHealth)
+	return mux
 }
 
 func (s *server) handleAuthorize(w http.ResponseWriter, r *http.Request) {

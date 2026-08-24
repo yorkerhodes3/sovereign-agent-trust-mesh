@@ -136,3 +136,154 @@ func TestMemoryRejectsNilRecord(t *testing.T) {
 		t.Fatal("nil record was accepted")
 	}
 }
+
+// TestMemoryByID covers the lookup attestation check V6 depends on.
+//
+// A superseded binding must stay RESOLVABLE while reporting active=false:
+// "your binding was replaced" and "no such binding" are different conditions
+// and deserve different denials.
+func TestMemoryByID(t *testing.T) {
+	s := store.NewMemory()
+	ctx := context.Background()
+
+	first := &binding.Record{
+		ID: "bnd_aaaaaaaaaaaaaaaaaaaaaaaa", CAID: "caid-1",
+		PeerID: "peer-a", AgentWallet: "0xaaaa", Nonce: "n1", SidecarKey: "ed25519:key-a",
+	}
+	if err := s.Commit(ctx, first); err != nil {
+		t.Fatalf("Commit: %v", err)
+	}
+
+	got, active, found := s.ByID(ctx, first.ID)
+	if !found || !active {
+		t.Fatalf("found=%v active=%v, want both true", found, active)
+	}
+	if got.SidecarKey != "ed25519:key-a" {
+		t.Fatalf("sidecarKey = %q", got.SidecarKey)
+	}
+
+	// Re-bind the same agent.
+	second := &binding.Record{
+		ID: "bnd_bbbbbbbbbbbbbbbbbbbbbbbb", CAID: "caid-1",
+		PeerID: "peer-b", AgentWallet: "0xaaaa", Nonce: "n2", SidecarKey: "ed25519:key-b",
+	}
+	if err := s.Commit(ctx, second); err != nil {
+		t.Fatalf("rebind: %v", err)
+	}
+
+	_, active, found = s.ByID(ctx, first.ID)
+	if !found {
+		t.Fatal("the superseded binding became unresolvable; V6 could not explain the denial")
+	}
+	if active {
+		t.Fatal("the superseded binding still reports active")
+	}
+
+	_, active, found = s.ByID(ctx, second.ID)
+	if !found || !active {
+		t.Fatalf("the new binding: found=%v active=%v, want both true", found, active)
+	}
+
+	if _, _, found = s.ByID(ctx, "bnd_ffffffffffffffffffffffff"); found {
+		t.Fatal("an unknown binding id was reported as found")
+	}
+}
+
+// TestMemoryByIDReturnsACopy prevents a caller mutating stored state through a
+// returned pointer.
+func TestMemoryByIDReturnsACopy(t *testing.T) {
+	s := store.NewMemory()
+	ctx := context.Background()
+
+	if err := s.Commit(ctx, &binding.Record{
+		ID: "bnd_aaaaaaaaaaaaaaaaaaaaaaaa", CAID: "caid-1",
+		PeerID: "peer-a", AgentWallet: "0xaaaa", Nonce: "n1",
+	}); err != nil {
+		t.Fatalf("Commit: %v", err)
+	}
+
+	first, _, _ := s.ByID(ctx, "bnd_aaaaaaaaaaaaaaaaaaaaaaaa")
+	first.PeerID = "tampered"
+
+	second, _, _ := s.ByID(ctx, "bnd_aaaaaaaaaaaaaaaaaaaaaaaa")
+	if second.PeerID != "peer-a" {
+		t.Fatalf("PeerID = %q; ByID aliases stored state", second.PeerID)
+	}
+}
+
+// TestMemoryActiveRecords is what the reconciler sweeps.
+func TestMemoryActiveRecords(t *testing.T) {
+	s := store.NewMemory()
+	ctx := context.Background()
+
+	records, err := s.ActiveRecords(ctx)
+	if err != nil {
+		t.Fatalf("ActiveRecords: %v", err)
+	}
+	if len(records) != 0 {
+		t.Fatalf("empty store returned %d records", len(records))
+	}
+
+	for i, caid := range []string{"caid-1", "caid-2", "caid-3"} {
+		if err := s.Commit(ctx, &binding.Record{
+			ID:     "bnd_" + string(rune('a'+i)) + "00000000000000000000000",
+			CAID:   caid,
+			PeerID: "peer-" + caid,
+			// Distinct wallets: sharing one would retire the earlier binding.
+			AgentWallet: "0x" + string(rune('a'+i)),
+			Nonce:       "nonce-" + caid,
+		}); err != nil {
+			t.Fatalf("Commit %s: %v", caid, err)
+		}
+	}
+
+	records, err = s.ActiveRecords(ctx)
+	if err != nil {
+		t.Fatalf("ActiveRecords: %v", err)
+	}
+	if len(records) != 3 {
+		t.Fatalf("ActiveRecords returned %d, want 3", len(records))
+	}
+
+	// Revoking one removes it from the sweep set.
+	if _, err := s.Revoke(ctx, "bnd_a00000000000000000000000", "test"); err != nil {
+		t.Fatalf("Revoke: %v", err)
+	}
+	records, _ = s.ActiveRecords(ctx)
+	if len(records) != 2 {
+		t.Fatalf("after revocation ActiveRecords returned %d, want 2", len(records))
+	}
+
+	// Mutating a returned record must not affect the store.
+	records[0].PeerID = "tampered"
+	again, _ := s.ActiveRecords(ctx)
+	for _, r := range again {
+		if r.PeerID == "tampered" {
+			t.Fatal("ActiveRecords aliases stored state")
+		}
+	}
+}
+
+func TestMemoryRevocationReason(t *testing.T) {
+	s := store.NewMemory()
+	ctx := context.Background()
+
+	rec := &binding.Record{
+		ID: "bnd_aaaaaaaaaaaaaaaaaaaaaaaa", CAID: "caid-1",
+		PeerID: "peer-a", AgentWallet: "0xaaaa", Nonce: "n1",
+	}
+	if err := s.Commit(ctx, rec); err != nil {
+		t.Fatalf("Commit: %v", err)
+	}
+
+	if _, ok := s.RevocationReason(rec.ID); ok {
+		t.Fatal("a live binding reported a revocation reason")
+	}
+	if _, err := s.Revoke(ctx, rec.ID, "binding.agent_wallet_unset"); err != nil {
+		t.Fatalf("Revoke: %v", err)
+	}
+	reason, ok := s.RevocationReason(rec.ID)
+	if !ok || reason != "binding.agent_wallet_unset" {
+		t.Fatalf("reason = %q (recorded=%v)", reason, ok)
+	}
+}

@@ -222,12 +222,9 @@ func newBrokerServer(t *testing.T, registry string) (*httptest.Server, *store.Me
 		cfg:      cfg,
 	}
 
-	mux := http.NewServeMux()
-	mux.HandleFunc("POST /v1/bindings", srv.handleCreateBinding)
-	mux.HandleFunc("GET /v1/bindings/{caid...}", srv.handleGetBinding)
-	mux.HandleFunc("GET /healthz", srv.handleHealth)
-
-	ts := httptest.NewServer(mux)
+	// Uses the SAME route table as main, so a route added there is automatically
+	// exercised here.
+	ts := httptest.NewServer(srv.routes())
 	t.Cleanup(ts.Close)
 	return ts, nonceStore
 }
