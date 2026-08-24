@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"errors"
 	"math/big"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -80,11 +81,51 @@ func liveClient(t *testing.T) *Client {
 	return c
 }
 
+// requireDeployedRegistry fails with an actionable message when the fixture does
+// not match the chain currently running.
+//
+// Without this, a stale fixture -- from an Anvil that has since been restarted
+// and redeployed -- surfaces as "expected a 32-byte word for address, got 0
+// bytes" from every test, which points at the ABI decoder rather than at the
+// actual problem.
+func requireDeployedRegistry(t *testing.T, registry [20]byte) {
+	t.Helper()
+
+	body := `{"jsonrpc":"2.0","id":1,"method":"eth_getCode","params":["0x` +
+		hex.EncodeToString(registry[:]) + `","latest"]}`
+	resp, err := http.Post(rpcURL(), "application/json", strings.NewReader(body))
+	if err != nil {
+		t.Skipf("no chain at %s: %v", rpcURL(), err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	var out struct {
+		Result string `json:"result"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode eth_getCode: %v", err)
+	}
+	if out.Result == "" || out.Result == "0x" {
+		t.Fatalf("no contract deployed at 0x%s on %s.\n"+
+			"The fixture is stale -- re-run:\n"+
+			"  forge script script/DeployRegistries.s.sol  --rpc-url %s --broadcast --private-key $PK\n"+
+			"  forge script script/SeedBrokerFixture.s.sol --rpc-url %s --broadcast --private-key $PK",
+			hex.EncodeToString(registry[:]), rpcURL(), rpcURL(), rpcURL())
+	}
+}
+
+// liveFixture loads the fixture and asserts it matches the running chain.
+func liveFixture(t *testing.T) (fixture, *Client, [20]byte) {
+	t.Helper()
+	f := loadFixture(t)
+	registry := mustAddr(t, f.IdentityRegistry)
+	requireDeployedRegistry(t, registry)
+	return f, liveClient(t), registry
+}
+
 // TestLiveOwnerOf proves the ownerOf calldata reaches the real ERC-721.
 func TestLiveOwnerOf(t *testing.T) {
-	f := loadFixture(t)
-	c := liveClient(t)
-	registry := mustAddr(t, f.IdentityRegistry)
+	f, c, registry := liveFixture(t)
 
 	owner, err := c.OwnerOf(context.Background(), registry, big.NewInt(f.LiveAgentID))
 	if err != nil {
@@ -100,9 +141,7 @@ func TestLiveOwnerOf(t *testing.T) {
 // no publicly documented selector for getAgentWallet(uint256), so only a real
 // call can confirm the derivation is right.
 func TestLiveGetAgentWallet(t *testing.T) {
-	f := loadFixture(t)
-	c := liveClient(t)
-	registry := mustAddr(t, f.IdentityRegistry)
+	f, c, registry := liveFixture(t)
 
 	wallet, err := c.GetAgentWallet(context.Background(), registry, big.NewInt(f.LiveAgentID))
 	if err != nil {
@@ -122,9 +161,7 @@ func TestLiveGetAgentWallet(t *testing.T) {
 // reading as zero. The Solidity test asserts this at the contract level; this
 // one asserts the broker actually SEES it over JSON-RPC.
 func TestLiveAgentWalletClearedOnTransfer(t *testing.T) {
-	f := loadFixture(t)
-	c := liveClient(t)
-	registry := mustAddr(t, f.IdentityRegistry)
+	f, c, registry := liveFixture(t)
 	ctx := context.Background()
 
 	owner, err := c.OwnerOf(ctx, registry, big.NewInt(f.SoldAgentID))
@@ -150,9 +187,7 @@ func TestLiveAgentWalletClearedOnTransfer(t *testing.T) {
 // TestLiveAgentURI proves the dynamic `string` return decoder works against real
 // ABI output rather than a hand-built fixture.
 func TestLiveAgentURI(t *testing.T) {
-	f := loadFixture(t)
-	c := liveClient(t)
-	registry := mustAddr(t, f.IdentityRegistry)
+	f, c, registry := liveFixture(t)
 
 	uri, err := c.AgentURI(context.Background(), registry, big.NewInt(f.LiveAgentID))
 	if err != nil {
@@ -166,9 +201,7 @@ func TestLiveAgentURI(t *testing.T) {
 // TestLiveAbsentAgentIsNotFound pins that a real ERC721NonexistentToken revert
 // maps to ErrAgentNotFound, which is what the verifier's B7 check branches on.
 func TestLiveAbsentAgentIsNotFound(t *testing.T) {
-	f := loadFixture(t)
-	c := liveClient(t)
-	registry := mustAddr(t, f.IdentityRegistry)
+	f, c, registry := liveFixture(t)
 
 	_, err := c.OwnerOf(context.Background(), registry, big.NewInt(f.AbsentAgentID))
 	if !errors.Is(err, binding.ErrAgentNotFound) {
@@ -180,8 +213,7 @@ func TestLiveAbsentAgentIsNotFound(t *testing.T) {
 // externally-owned account: eth_call on an address with no code succeeds and
 // returns empty, which must read as a rejection.
 func TestLiveEOAIsNotAnERC1271Wallet(t *testing.T) {
-	f := loadFixture(t)
-	c := liveClient(t)
+	f, c, _ := liveFixture(t)
 
 	ok, err := c.IsValidERC1271Signature(context.Background(),
 		mustAddr(t, f.Operator), [32]byte{}, make([]byte, 65))

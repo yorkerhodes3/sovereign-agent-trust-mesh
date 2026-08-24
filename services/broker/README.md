@@ -12,24 +12,27 @@ Phase 2/3.
 ## What is implemented and proven
 
 ```
-cmd/satm-broker/   HTTP service: POST /v1/bindings, GET /v1/bindings/{caid}
+cmd/satm-broker/   HTTP service + reconciliation loop
 internal/binding/
   document.go      canonical document + normative field encodings
-  canonical.go     RFC 8785 JCS serialisation
   peerproof.go     checks B4, B5   libp2p host-key proof
   eip712.go        check  B9       EIP-712 MeshBinding digest
   ecdsa.go                          secp256k1 recovery, low-s enforced
   registration.go  checks B11-B13  ERC-8004 registration file + sam:// grammar
   verifier.go      checks B1-B15   the ordered pipeline
+  revalidate.go                     post-admission re-checks for the reconciler
   reasons.go                        stable reason codes
 internal/fetch/    RegistrationFetcher, SSRF-hardened  (TH-8, TH-9)
 internal/chainrpc/ ChainClient over JSON-RPC + hand-rolled ABI  (TH-11)
+internal/reconcile/ revocation loop  (TH-5, TH-16)
 internal/store/    in-memory NonceStore + shared conformance suite
 internal/pgstore/  PostgreSQL NonceStore
 internal/config/   satm-broker.yaml loading and validation
+
+../internal/canonicaljson/  RFC 8785 JCS, shared with the sidecar
 ```
 
-`go test ./...` → **all pass**; coverage 90%+ in every port package.
+`go test ./...` → **all pass**; coverage 84–96% in every package with logic.
 
 The suite follows [SPECIFICATION.md §4.6](../../SPECIFICATION.md): **one test per
 check, each proving denial in isolation**, so a failing test name points straight
@@ -49,6 +52,35 @@ at the numbered check it defends.
 | `BlockedIP` / `FetchRefusesRedirectToLoopback` | **TH-8.** The `agentURI` is attacker-chosen, so every fetch is attacker-directed. Includes `169.254.169.254` (cloud metadata) and IPv4-mapped IPv6 loopback, the classic bypass. |
 | `CheckJSONShapeDepth` | **TH-9.** 40 KB of `[[[[...` is under any byte cap yet exhausts the stack during decoding. |
 | `QuorumRefusesOnDisagreement` | **TH-11.** A single lying RPC provider could otherwise forge the chain state an entire binding rests on. |
+| `LiveReconcileRevokesTransferredAgent` | **TH-5, on a live chain.** The agent NFT is transferred with `cast`, and the next sweep revokes the binding. This is PLAN exit criterion 3. |
+| `SweepDoesNotRevokeOnInfrastructureFailure` | The inverse, and just as important: an RPC outage must revoke **nothing**, or one bad afternoon at a provider takes down the whole mesh. |
+
+## Revocation
+
+A binding is not a permanent fact. Three things can invalidate one after
+admission, none of which produce any signal at the broker: the agent NFT is sold
+(TH-5), the registration file is edited to drop the `SAM` service entry (TH-16),
+or the agent is marked inactive.
+
+`internal/reconcile` sweeps active bindings and re-runs the post-admission
+checks. Two design points:
+
+**It reuses the same check implementations as admission.** A second
+implementation would drift, and a reconciler more permissive than the admission
+path is worse than none — it would report everything healthy while the invariant
+it protects had already broken.
+
+**"Could not check" and "checked and failed" stay distinct.** Only a genuine
+verdict revokes. RPC outages, unreachable registration hosts, and *unclassified*
+errors all leave bindings in place and log loudly. Note that `binding.ReasonOf`
+maps unclassified errors to `ReasonMalformed`, so it deliberately is **not** used
+to make this decision.
+
+Revocation writes to the store first — it is authoritative — and then tells the
+control plane, so a control-plane outage cannot leave a sold agent trusted by
+the broker. The nonce is never released: a revoked binding's document is still
+validly signed, so recycling its nonce would let the agent re-admit itself with
+the very document just revoked.
 
 ## Tests that need real infrastructure
 
@@ -57,10 +89,10 @@ Two build-tagged suites run against live services. Both execute in CI
 
 ```bash
 # Live chain: needs anvil + the registries deployed (see contracts/)
-go test -tags integration ./internal/chainrpc/ ./cmd/satm-broker/
+go test -tags integration ./broker/internal/chainrpc/ ./broker/cmd/satm-broker/
 
 # Postgres NonceStore conformance
-SATM_POSTGRES_DSN=... go test -tags postgres ./internal/pgstore/
+SATM_POSTGRES_DSN=... go test -tags postgres ./broker/internal/pgstore/
 ```
 
 These exist because the stubbed tests genuinely cannot catch certain classes of
@@ -110,25 +142,27 @@ who owns this agent" is exactly the situation in which continuing is unsafe.
 
 ## Not yet implemented
 
-| Piece | Phase |
+| Piece | Where it stands |
 | --- | --- |
-| Enrollment gate (`/admin/enrollments` polling) | 2 |
-| Label projection into Biscuit tokens | 2 |
-| `satm-cli bind` | 2 |
-| Reconciliation loop | 2 |
-| Call attestation (V1–V8) | 2 |
-| Trust API, policy projection | 2–3 |
+| Enrollment gate (`/admin/enrollments` polling) | Not blocked; admin API shape documented in [BACKLOG.md §3](../../BACKLOG.md) |
+| Label projection into Biscuit tokens | Blocked on the enrollment gate |
+| `satm-cli bind` | Not blocked; every primitive it needs is exported and tested |
+| Mesh revocation propagation (`/admin/revoke`) | Reconciler revokes locally; the control-plane call is a `NoopMeshRevoker` that warns loudly |
+| Trust tiers, policy projection | Phase 3 |
+
+Call attestation (V1–V8) now lives in
+[services/sidecar](../sidecar/README.md).
 
 ## Running
 
 ```bash
-cd services/broker
+cd services
 go build ./...
 go vet ./...
 go test ./...
 
-# Serve, against a devnet configured in satm-broker.yaml
-go run ./cmd/satm-broker -config satm-broker.yaml
+# Serve, against a devnet configured in broker/satm-broker.yaml
+go run ./broker/cmd/satm-broker -config broker/satm-broker.yaml
 curl http://127.0.0.1:8081/healthz
 ```
 

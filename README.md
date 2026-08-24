@@ -54,6 +54,7 @@ windows.
 | [CONCEPT-BRIEF.md](CONCEPT-BRIEF.md) | The original vision and six-plane architecture |
 | **[SPECIFICATION.md](SPECIFICATION.md)** | Full technical specification: binding protocol, trust tiers, components, contracts, flows, threat model, conformance |
 | **[PLAN.md](PLAN.md)** | Phased implementation plan, spikes, work breakdown, risk register, milestones |
+| **[BACKLOG.md](BACKLOG.md)** | **What is built, what is not, and precisely what each remaining item needs** |
 | [docs/DEMO.md](docs/DEMO.md) | The scripted end-to-end scenario, including 18 negative controls |
 | **[docs/SPIKE-FINDINGS.md](docs/SPIKE-FINDINGS.md)** | **Phase 1 results — what was tested against a real SAM mesh, what held, and what didn't** |
 | [docs/RESEARCH-NOTES.md](docs/RESEARCH-NOTES.md) | Every upstream fact the design relies on, with citations |
@@ -136,8 +137,9 @@ A trust prototype that only demonstrates the happy path proves nothing.
 
 ## Status
 
-**Phase 0 complete. Phase 1 spikes complete.** The contract layer is verified, and every
-blocking assumption about SAM has now been tested against a real mesh.
+**Phases 0 and 1 complete. Phase 2 is 11 of 14 tasks done** — the whole
+admission path works end to end against real ERC-8004 bytecode, and bindings
+are revocable.
 
 | Component | State |
 | --- | --- |
@@ -145,12 +147,41 @@ blocking assumption about SAM has now been tested against a real mesh.
 | Foundry project + vendored ERC-8004 registries | **Working — 18/18 tests pass** |
 | ERC-8226 interfaces (verbatim) + SATM extension interfaces | Compiling |
 | Registry deployment to a live chain | **Verified on anvil** |
-| CI (Solidity + Go) | **Green on a clean Linux runner** |
+| CI (Solidity + Go) | **Green**, incl. `-race`, a live-chain job, and a Postgres service container |
 | **Phase 1 spikes S-1…S-5** | **All closed against a real SAM mesh** |
-| **Phase 2: Agent Mesh Binding verifier (B1–B15)** | **Working — 31/31 tests pass** |
-| Broker chain client, fetcher, store, API | Interfaces defined; implementations next |
+| **Agent Mesh Binding verifier (B1–B15)** | **Working** — one test per check |
+| **Broker chain client, fetcher, stores, HTTP API** | **Working** — 9 end-to-end tests against live registries |
+| **Call Attestation (V1–V8)** | **Working** — 41 tests, one per check |
+| **Reconciliation loop** | **Working** — proven on a live chain |
+| `satm-sidecar` inbound authorization | Working; **outbound returns 501** pending the Phase 3 trust plane |
+| Enrollment gate, label projection, `satm-cli` | Not started — see [BACKLOG.md §3](BACKLOG.md) |
 | Devnet compose | Corrected from spike findings; still not executed (no Docker) |
-| Indexer, sidecar, agents | Not started (Phases 3–5) |
+| Indexer, mandates, agents | Not started (Phases 3–5) |
+
+For the full picture of what remains and exactly what each item needs, see
+**[BACKLOG.md](BACKLOG.md)**.
+
+### On-chain state now controls mesh access
+
+This is the claim the concept brief says nothing today delivers, and it is now
+demonstrated by an automated test against a live chain:
+
+```
+agent registered and bound
+  → NFT transferred with `cast send ... transferFrom`
+  → next reconcile sweep
+  → binding revoked, reason binding.agent_wallet_unset
+```
+
+Nothing SATM-specific tracks the sale. ERC-8004 zeroes `agentWallet` on
+transfer, the reconciler re-reads it, and check B7 fails. The test asserts the
+on-chain wallet actually cleared *first*, so a failure is attributable to the
+reconciler rather than to a failed transaction.
+
+Two negative controls sit alongside it, and they matter as much as the positive
+case: repeated sweeps leave a healthy binding untouched, and a dead RPC endpoint
+revokes **nothing**. Treating an outage as a verdict would let one bad afternoon
+at a provider revoke the entire mesh.
 
 ### The result the design depended on
 
@@ -179,19 +210,28 @@ Full evidence, including a blocking upstream defect
 ([google/sam#297](https://github.com/google/sam/issues/297)), is in
 [docs/SPIKE-FINDINGS.md](docs/SPIKE-FINDINGS.md).
 
-### The binding verifier now exists
+### The two mechanisms this project is about
 
-The mechanism this whole project is about is implemented and tested:
-**31/31 tests, one per check B1–B15**, each proving denial in isolation.
+**The Agent Mesh Binding** ties a libp2p PeerID to an on-chain `agentId`. One
+test is worth reading in particular: `B2a_RejectsAttackerDeployedRegistry`. The
+attacker deploys their own ERC-8004-shaped registry, mints themselves
+`agentId 42` with a wallet they control, publishes a matching registration file,
+and signs both proofs correctly. The submission is **internally consistent** —
+every other check passes. Only the registry allow-list stops it, which is why
+the EIP-712 domain is derived from *our* allow-list and never from the submitted
+document.
 
-The one worth reading is `B2a_RejectsAttackerDeployedRegistry`. The attacker deploys
-their own ERC-8004-shaped registry, mints themselves `agentId 42` with a wallet they
-control, publishes a matching registration file, and signs both proofs correctly. The
-submission is **internally consistent** — every other check passes. Only the registry
-allow-list stops it, which is why the EIP-712 domain is derived from *our* allow-list
-and never from the submitted document.
+**The Call Attestation** answers "who is calling?" per tool call. Spike S-5
+proved this is not optional: SAM authenticates the peer at the transport layer
+but does not pass that identity to a locally-spawned service, so without an
+attestation any caller could name someone else's CAID and inherit their
+authority. Check V6 is what makes the hot signing key revocable with no
+revocation list — the caller's binding id is inside the signature and must be
+current, so re-binding an agent invalidates every outstanding attestation signed
+under the old key.
 
-See [services/broker/README.md](services/broker/README.md).
+See [services/broker/README.md](services/broker/README.md) and
+[services/sidecar/README.md](services/sidecar/README.md).
 
 ---
 

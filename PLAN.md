@@ -203,27 +203,35 @@ independently. A positive result only enables the optional **channel binding** c
 > | P2-6 full `verify_binding` (B1–B15) | ✅ done |
 > | P2-7 Postgres trust store | ✅ done — `internal/pgstore`, verified in CI |
 > | P2-8 `POST /v1/bindings` | ✅ done — `cmd/satm-broker` |
-> | P2-9…P2-14 enrollment gate, label projection, CLI, reconciliation, call attestation | pending |
+> | P2-12 reconciliation loop | ✅ done — proven on a live chain |
+> | P2-13 call attestation (V1–V8) | ✅ done — `services/internal/attest` |
+> | P2-14 split authorize schemas | ✅ done — `services/sidecar` |
+> | P2-9 enrollment gate | pending — not blocked; see [BACKLOG.md](BACKLOG.md) |
+> | P2-10 label projection | pending — blocked on P2-9 |
+> | P2-11 `satm-cli bind` | pending — not blocked |
 >
 > **What is actually proven, and how:**
 >
-> - **9 end-to-end tests** drive the real HTTP API against ERC-8004 registries deployed
->   on Anvil. A valid binding is admitted with the correct CAID; replay, unknown agent,
->   forged peer signature and wrong-mesh are each denied with the specific expected
->   reason code — not merely "rejected somehow".
-> - **7 live-chain tests** confirm the hand-rolled ABI encoding reaches the intended
->   functions on real bytecode. This matters because `getAgentWallet(uint256)` has no
->   publicly documented selector to pin against, so a derivation bug would be invisible
->   to any stubbed test. The same tests observe `agentWallet` clearing on ERC-721
->   transfer *through the broker's own code path*, which is the TH-5 property the
->   revocation story depends on.
-> - **The Postgres store is verified in CI**, not just written: a service container runs
->   the same conformance suite the in-memory store passes, including a 32-way concurrent
->   commit under `-race`. That case is the only thing that proves B3-checks /
->   B15-consumes is genuinely atomic rather than decorative.
+> - **Exit criterion 3 is met.** A live test registers an agent, binds it,
+>   transfers the NFT with `cast`, and the next reconcile sweep revokes the
+>   binding with reason `binding.agent_wallet_unset`. Nothing SATM-specific
+>   tracks the sale: ERC-8004 zeroes `agentWallet` on transfer and check B7
+>   fails. Two negative controls guard the other direction — healthy bindings
+>   survive repeated sweeps, and a dead RPC endpoint revokes nothing.
+> - **9 end-to-end tests** drive the real HTTP API against ERC-8004 registries
+>   deployed on Anvil, each denial asserted against its specific reason code.
+> - **7 live-chain tests** confirm the hand-rolled ABI reaches the intended
+>   functions. `getAgentWallet(uint256)` has no publicly documented selector to
+>   pin against, so only a real call could catch a derivation bug.
+> - **41 attestation tests** cover V1–V8 one at a time, plus replay at a
+>   different callee, read-tool→asset-tool escalation, mutated args, superseded
+>   bindings and a 32-way concurrent replay.
+> - **The Postgres store is verified in CI**, running the same conformance suite
+>   the in-memory store passes, under `-race`.
 >
-> Remaining Phase 2 work is integration with SAM (enrollment gate, label projection,
-> reconciliation) rather than anything in the binding pipeline itself.
+> The three remaining tasks all need a live SAM control plane. P2-9's
+> *implementation* is not blocked; only the full node-joins-mesh demo is, by
+> [google/sam#297](https://github.com/google/sam/issues/297).
 
 | ID | Task | Detail | Acceptance |
 | --- | --- | --- | --- |
