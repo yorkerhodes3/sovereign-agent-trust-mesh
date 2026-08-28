@@ -32,11 +32,29 @@ That is a deliberate choice rather than laziness:
 
 ## Diagrams
 
-Hand-authored SVG rather than Mermaid or another generator. Auto-layout produces
-generic diagrams; these four each carry a specific argument, so the layout is
-part of the explanation.
+Hand-authored SVG here; **Mermaid in the markdown docs** (`SPECIFICATION.md` has
+five). That split is deliberate, and the dividing line is *what the layout is
+doing*:
 
-Each one:
+- **Mermaid for sequences and flowcharts**, where layout is mechanical —
+  participants across the top, time down. Auto-layout is exactly right, and
+  GitHub renders it natively in markdown at zero cost.
+- **Hand-authored SVG for conceptual diagrams**, where the layout carries the
+  argument. `missing-joint.svg` is about an *absence* — Mermaid draws
+  connections, so a missing arrow reads as an unfinished diagram rather than as
+  the thesis. `attestation.svg` is a two-panel before/after comparison, which
+  Mermaid has no primitive for.
+
+`revocation.svg` is a linear pipeline and would convert to Mermaid cleanly if
+someone prefers that; it is hand-authored only for consistency with its three
+neighbours.
+
+Two practical reasons this site does not pre-render Mermaid: the output bakes in
+one palette at render time, which would break the `prefers-color-scheme`
+switching below; and `mermaid-cli` pulls npm and puppeteer into a repo that
+currently has no npm dependencies at all.
+
+Each SVG:
 
 - carries `<title>` and `<desc>`, referenced by `aria-labelledby`, so it is
   meaningful to a screen reader and not merely decorative;
@@ -45,6 +63,10 @@ Each one:
   custom properties do not reach;
 - uses the same semantic colours as the site — green for verified, amber for
   changed or unproven, red for a denial or an attack.
+
+The trade-off to be aware of: absolute coordinates mean adding a box usually
+means re-laying out its neighbours. That is the price of the control, and it is
+why anything sequence-shaped should go in markdown as Mermaid instead.
 
 ## Editing
 
