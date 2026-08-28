@@ -35,103 +35,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Catches unclosed tags and malformed attributes, which in hand-written
-      # HTML are easy to introduce and invisible until a browser silently
-      # recovers from them differently than you expected.
-      - name: Check HTML and SVG are well-formed
-        run: |
-          python3 - <<'PY'
-          import sys, xml.etree.ElementTree as ET
-          from html.parser import HTMLParser
-          from pathlib import Path
-
-          failures = []
-
-          # SVG is XML, so it must parse strictly.
-          for svg in sorted(Path("site").rglob("*.svg")):
-              try:
-                  ET.parse(svg)
-              except ET.ParseError as e:
-                  failures.append(f"{svg}: {e}")
-
-          # HTML gets a tag-balance check. void elements never close.
-          VOID = {"area","base","br","col","embed","hr","img","input",
-                  "link","meta","param","source","track","wbr"}
-
-          class Balance(HTMLParser):
-              def __init__(self):
-                  super().__init__(convert_charrefs=True)
-                  self.stack = []
-                  self.errors = []
-              def handle_starttag(self, tag, attrs):
-                  if tag not in VOID:
-                      self.stack.append((tag, self.getpos()[0]))
-              def handle_endtag(self, tag):
-                  if tag in VOID:
-                      return
-                  if not self.stack:
-                      self.errors.append(f"line {self.getpos()[0]}: stray </{tag}>")
-                      return
-                  open_tag, line = self.stack.pop()
-                  if open_tag != tag:
-                      self.errors.append(
-                          f"line {self.getpos()[0]}: </{tag}> closes <{open_tag}> opened on line {line}")
-
-          for page in sorted(Path("site").rglob("*.html")):
-              p = Balance()
-              p.feed(page.read_text(encoding="utf-8"))
-              for err in p.errors:
-                  failures.append(f"{page}: {err}")
-              for tag, line in p.stack:
-                  failures.append(f"{page}: <{tag}> opened on line {line} is never closed")
-
-          if failures:
-              print("::error::malformed markup")
-              for f in failures:
-                  print(f"  {f}")
-              sys.exit(1)
-          print("all HTML and SVG well-formed")
-          PY
-
-      # A published site with a dead internal link is worse than no site.
-      - name: Check internal links and assets resolve
-        run: |
-          python3 - <<'PY'
-          import re, sys
-          from pathlib import Path
-          from urllib.parse import urldefrag
-
-          root = Path("site")
-          broken = []
-
-          for page in sorted(root.rglob("*.html")):
-              html = page.read_text(encoding="utf-8")
-              refs = re.findall(r'(?:href|src)="([^"]+)"', html)
-              for ref in refs:
-                  if ref.startswith(("http://", "https://", "mailto:", "data:", "#")):
-                      continue
-                  target, _ = urldefrag(ref)
-                  if not target:
-                      continue
-                  resolved = (page.parent / target).resolve()
-                  if not resolved.exists():
-                      broken.append(f"{page}: {ref}")
-
-          # In-page anchors must exist too, or the nav silently does nothing.
-          for page in sorted(root.rglob("*.html")):
-              html = page.read_text(encoding="utf-8")
-              ids = set(re.findall(r'id="([^"]+)"', html))
-              for anchor in re.findall(r'href="#([^"]+)"', html):
-                  if anchor not in ids:
-                      broken.append(f"{page}: #{anchor} has no matching id")
-
-          if broken:
-              print("::error::broken references")
-              for b in broken:
-                  print(f"  {b}")
-              sys.exit(1)
-          print("all internal references resolve")
-          PY
+      # Calls the SAME script a developer runs locally, rather than inlining a
+      # copy of it. An inlined copy drifts: this workflow's first version did
+      # exactly that and failed on paths the local script handled correctly.
+      # The contracts workflow learned the same lesson in commit de35b0f.
+      - name: Validate markup and references
+        run: python3 tools/check-site.py
 
   deploy:
     name: deploy

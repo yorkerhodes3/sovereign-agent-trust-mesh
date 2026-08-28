@@ -48,7 +48,10 @@ Each one:
 
 ## Editing
 
-Run the checks before pushing. CI runs the identical ones.
+Run the checks before pushing. CI runs the identical ones — it calls this same
+script rather than an inlined copy, because an inlined copy drifts. The first
+version of the Pages workflow inlined it and immediately failed on paths the
+local script handled correctly.
 
 ```bash
 python tools/check-site.py          # markup well-formed, references resolve
@@ -61,6 +64,17 @@ file that exists, and that every in-page `#anchor` has a matching `id`.
 
 It has been negative-tested: an unclosed tag, a dead link, a dangling anchor and
 a malformed SVG are each detected and fail the build.
+
+### Use relative paths, never root-relative
+
+This is a **project** Pages site, so it is served from
+`/sovereign-agent-trust-mesh/`, not from the domain root. A link to
+`/assets/style.css` resolves to `yorkerhodes3.github.io/assets/style.css` and
+404s in production while looking perfectly fine in local preview.
+
+Write `assets/style.css`. The site is flat, so relative paths always work — and
+they keep local preview honest, since it then exercises the same resolution the
+live site does.
 
 ## Keeping it honest
 
