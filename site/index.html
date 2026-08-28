@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sovereign Agent Trust Mesh — trust between AI agents across organizations</title>
+<meta name="description" content="SATM joins Google SAM, ERC-8004 and ERC-8226 so AI agents can trust each other across organizational boundaries. The Agent Mesh Binding is the missing joint: one document, signed twice.">
+<link rel="stylesheet" href="assets/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🕸️</text></svg>">
+<meta property="og:title" content="Sovereign Agent Trust Mesh">
+<meta property="og:description" content="Nothing binds a libp2p PeerID to an on-chain agentId. That joint — and the enforcement machinery around it — is what this prototype builds.">
+<meta property="og:type" content="website">
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+
+<header class="site-header">
+  <div class="site-header__inner">
+    <a class="brand" href="index.html">satm<span>://</span></a>
+    <nav class="site-nav" aria-label="Main">
+      <a href="index.html" aria-current="page">Overview</a>
+      <a href="how-it-works.html">How it works</a>
+      <a href="evidence.html">Evidence</a>
+      <a href="architecture.html">Architecture</a>
+      <a href="https://github.com/yorkerhodes3/sovereign-agent-trust-mesh">GitHub&nbsp;↗</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+
+  <div class="hero">
+    <p class="eyebrow">Research prototype · Apache-2.0</p>
+    <h1>Agents can talk. They still can&rsquo;t trust each other.</h1>
+    <p class="lede">
+      AI agents already call each other&rsquo;s tools. What they cannot do is answer
+      <em>who owns this agent, what authority does it hold, what has it actually done,
+      and what proof exists</em> — without a pre-existing relationship.
+    </p>
+    <p class="lede">
+      The Sovereign Agent Trust Mesh is a prototype that answers those questions by joining
+      three things that do not currently connect.
+    </p>
+    <div class="buttons">
+      <a class="btn btn--primary" href="how-it-works.html">How it works</a>
+      <a class="btn" href="evidence.html">What&rsquo;s actually proven</a>
+      <a class="btn" href="https://github.com/yorkerhodes3/sovereign-agent-trust-mesh">Read the code</a>
+    </div>
+  </div>
+
+  <!-- ==================================================================== -->
+  <section id="problem">
+    <div class="prose">
+      <p class="kicker">The problem</p>
+      <h2>Three standards, one gap</h2>
+      <p>
+        Each of these solves a real piece of the problem. None of them solves it alone,
+        and — crucially — no two of them are joined at the point that matters.
+      </p>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Layer</th><th>Technology</th><th>What it gives us</th><th>What it lacks</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Transport</td>
+            <td><a href="https://github.com/google/sam">Google SAM</a></td>
+            <td>Zero-config P2P mesh, cryptographic node identity, MCP as the agent API</td>
+            <td class="muted">No global reputation, no verifiable mandates</td>
+          </tr>
+          <tr>
+            <td>Identity&nbsp;&amp;&nbsp;trust</td>
+            <td><a href="https://ercs.ethereum.org/ERCS/erc-8004">ERC-8004</a></td>
+            <td>Portable agent identity, reputation, independent validation</td>
+            <td class="muted">No transport</td>
+          </tr>
+          <tr>
+            <td>Authority</td>
+            <td><a href="https://eips.ethereum.org/EIPS/eip-8226">ERC-8226</a></td>
+            <td>Machine-verifiable, scoped, capped, time-bounded delegation</td>
+            <td class="muted">Neither identity nor transport</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <figure>
+      <img src="assets/diagrams/missing-joint.svg"
+           alt="Diagram: SAM identifies nodes by libp2p PeerID; ERC-8004 identifies agents by agentId and agentWallet; ERC-8226 keys mandates to an agent address. ERC-8004 and ERC-8226 are connected to each other, but nothing connects a PeerID to an agentId.">
+      <figcaption>
+        ERC-8004 and ERC-8226 already meet, because a mandate is keyed to an address and an agent
+        has one. The unsolved edge is on the left: <strong>nothing binds a network identity to an
+        on-chain one</strong>. So on-chain trust cannot gate mesh traffic, and a mandate granted to
+        an address cannot be enforced against a network connection.
+      </figcaption>
+    </figure>
+  </section>
+
+  <!-- ==================================================================== -->
+  <section id="contribution">
+    <div class="prose">
+      <p class="kicker">The contribution</p>
+      <h2>One document, signed twice</h2>
+      <p>
+        The <strong>Agent Mesh Binding</strong> is a single canonical document signed by two
+        different keys: the node&rsquo;s libp2p host key, proving it controls the PeerID, and the
+        agent&rsquo;s ERC-8004 <code>agentWallet</code> via EIP-712, proving it controls the
+        on-chain identity.
+      </p>
+      <p>
+        Neither claim is worth anything alone. A chain-side claim proves nothing about the node —
+        anyone can publish a registration file naming any PeerID. A node-side claim proves nothing
+        about the agent — any node can assert it is <code>agentId 42</code>.
+        <strong>Forging a binding requires both private keys.</strong>
+      </p>
+    </div>
+
+    <figure>
+      <img src="assets/diagrams/binding.svg"
+           alt="Diagram: one canonical JSON document containing agentRegistry, agentId, agentWallet, peerId, sidecarKey, meshId, nonce and expiry, signed on one side by the libp2p host key and on the other by the ERC-8004 agentWallet via EIP-712.">
+      <figcaption>
+        The document is serialised with RFC&nbsp;8785 canonical JSON so both signers hash identical
+        bytes even if they are written in different languages. The broker then runs fifteen ordered
+        checks (B1–B15) and denies on the first failure.
+        <a href="how-it-works.html#binding">See the full check list →</a>
+      </figcaption>
+    </figure>
+
+    <div class="note">
+      <p class="note__title">The check that carries the most weight</p>
+      <p>
+        <strong>B2a, the registry allow-list.</strong> An attacker can deploy their own
+        ERC-8004-shaped registry, mint themselves <code>agentId 42</code> with a wallet they
+        control, publish a matching registration file, and sign both proofs correctly. That
+        submission is <em>internally consistent</em> — every other check passes. Only the
+        allow-list stops it, which is why the EIP-712 domain is derived from <em>our</em>
+        allow-list and never from the submitted document.
+      </p>
+    </div>
+  </section>
+
+  <!-- ==================================================================== -->
+  <section id="revocation">
+    <div class="prose">
+      <p class="kicker">The property that makes it useful</p>
+      <h2>Selling an agent revokes its access</h2>
+      <p>
+        ERC-8004 clears <code>agentWallet</code> when the agent NFT is transferred. That single
+        upstream behaviour means a sold agent loses its mesh access and its ability to move assets
+        <strong>with no SATM-specific bookkeeping tracking the sale</strong>.
+      </p>
+      <p>
+        This is the capability the concept brief says nothing today delivers: on-chain state
+        changes propagating into live network access control. It is demonstrated by an automated
+        test against a live chain, not asserted.
+      </p>
+    </div>
+
+    <figure>
+      <img src="assets/diagrams/revocation.svg"
+           alt="Diagram: an agent is sold, ERC-8004 clears agentWallet to the zero address, the broker's reconciliation sweep re-reads it and check B7 fails, and the binding is revoked with reason agent_wallet_unset.">
+      <figcaption>
+        The two negative controls beneath matter as much as the positive case. A reconciler that
+        revoked healthy bindings, or that treated an RPC outage as a verdict, would be worse than
+        no reconciler at all.
+      </figcaption>
+    </figure>
+  </section>
+
+  <!-- ==================================================================== -->
+  <section id="proof">
+    <div class="prose">
+      <p class="kicker">Working style</p>
+      <h2>Verified, not asserted</h2>
+      <p>
+        This project treats &ldquo;the docs say so&rdquo; as an unverified claim. Every assumption
+        about upstream behaviour was tested against a real SAM mesh before the design leaned on it,
+        and two of those tests changed the design rather than confirming it.
+      </p>
+    </div>
+
+    <div class="stats">
+      <div class="stat">
+        <div class="stat__value">227</div>
+        <div class="stat__label">automated tests</div>
+      </div>
+      <div class="stat">
+        <div class="stat__value">189</div>
+        <div class="stat__label">Go unit tests</div>
+      </div>
+      <div class="stat">
+        <div class="stat__value">20</div>
+        <div class="stat__label">against a live chain</div>
+      </div>
+      <div class="stat">
+        <div class="stat__value">18</div>
+        <div class="stat__label">Solidity contract tests</div>
+      </div>
+    </div>
+
+    <div class="grid grid--3">
+      <div class="card card--ok">
+        <span class="card__label">Spike S-2 · passed</span>
+        <h3>The load-bearing assumption held</h3>
+        <p class="small muted">
+          SAM node attenuation really does evaluate the <em>caller&rsquo;s</em> attested labels and
+          deny at the transport handshake. Had this failed, the whole enforcement model would have
+          needed reworking.
+        </p>
+      </div>
+      <div class="card card--warn">
+        <span class="card__label">Spike S-1 · changed the design</span>
+        <h3>A specified path didn&rsquo;t exist</h3>
+        <p class="small muted">
+          The spec described labels being supplied by the broker at approval. That mechanism is not
+          in SAM. Labels are declared by the node and attested by the admin. §6.1.3 was wrong and
+          was corrected.
+        </p>
+      </div>
+      <div class="card card--warn">
+        <span class="card__label">Spike S-5 · changed the design</span>
+        <h3>An optional feature became mandatory</h3>
+        <p class="small muted">
+          SAM does not pass caller identity to a local MCP service. That makes the Call Attestation
+          <em>necessary</em> rather than defence in depth — it is the only way an inbound sidecar
+          learns who called.
+        </p>
+      </div>
+    </div>
+
+    <p class="prose">
+      <a href="evidence.html">See the full evidence, including what is still unproven →</a>
+    </p>
+  </section>
+
+  <!-- ==================================================================== -->
+  <section id="status">
+    <div class="prose">
+      <p class="kicker">Status</p>
+      <h2>Where this actually stands</h2>
+      <p>
+        This is a research prototype, not a product. The admission path works end to end against
+        real ERC-8004 bytecode and bindings are revocable. The trust, compliance and settlement
+        planes are specified but not built.
+      </p>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Phase</th><th>State</th><th>Evidence</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>0 — Foundations</td>
+            <td><span class="badge badge--ok">complete</span></td>
+            <td>18/18 contract tests, live devnet deploy</td>
+          </tr>
+          <tr>
+            <td>1 — De-risking spikes</td>
+            <td><span class="badge badge--ok">complete</span></td>
+            <td>All five closed against a real SAM mesh</td>
+          </tr>
+          <tr>
+            <td>2 — Identity plane &amp; binding</td>
+            <td><span class="badge badge--warn">11 of 14</span></td>
+            <td>Binding, attestation, revocation all working and tested</td>
+          </tr>
+          <tr>
+            <td>3 — Trust plane</td>
+            <td><span class="badge badge--neutral">not started</span></td>
+            <td class="muted">Specified in §5.2</td>
+          </tr>
+          <tr>
+            <td>4 — Compliance plane</td>
+            <td><span class="badge badge--neutral">not started</span></td>
+            <td class="muted">ERC-8226 / RAMS, specified in §7.2</td>
+          </tr>
+          <tr>
+            <td>5 — Settlement &amp; audit</td>
+            <td><span class="badge badge--neutral">not started</span></td>
+            <td class="muted">Specified in §7.3</td>
+          </tr>
+          <tr>
+            <td>6 — Demo &amp; hardening</td>
+            <td><span class="badge badge--neutral">not started</span></td>
+            <td class="muted">18 negative controls scripted</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="note note--warn">
+      <p class="note__title">Known gaps, stated plainly</p>
+      <p>
+        Outbound authorization returns <code>501</code> pending the trust plane. Mesh revocation is
+        not yet propagated to the control plane, so a revoked peer keeps its Biscuit until expiry.
+        The default broker build assumes a single replica. Full list, with what each one needs, is
+        in <a href="https://github.com/yorkerhodes3/sovereign-agent-trust-mesh/blob/main/BACKLOG.md">BACKLOG.md</a>.
+      </p>
+    </div>
+  </section>
+
+  <!-- ==================================================================== -->
+  <section id="next">
+    <div class="prose">
+      <h2>Where to go next</h2>
+    </div>
+    <div class="grid grid--3">
+      <div class="card">
+        <h3><a href="how-it-works.html">How it works</a></h3>
+        <p class="small muted">
+          The binding checks B1–B15, the attestation checks V1–V8, and why the ordering of each is
+          load-bearing.
+        </p>
+      </div>
+      <div class="card">
+        <h3><a href="evidence.html">Evidence</a></h3>
+        <p class="small muted">
+          What was measured against a real mesh, what changed as a result, and an honest separation
+          of proven from specified.
+        </p>
+      </div>
+      <div class="card">
+        <h3><a href="architecture.html">Architecture</a></h3>
+        <p class="small muted">
+          The six planes, the components, two-sided enforcement, and the threat model.
+        </p>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer class="site-footer">
+  <div class="site-footer__inner">
+    <div>
+      <p><strong>Sovereign Agent Trust Mesh</strong><br>
+      <span class="muted">A research prototype. Apache-2.0.</span></p>
+    </div>
+    <div>
+      <p class="muted"><strong>Repository</strong></p>
+      <ul>
+        <li><a href="https://github.com/yorkerhodes3/sovereign-agent-trust-mesh">Source on GitHub</a></li>
+        <li><a href="https://github.com/yorkerhodes3/sovereign-agent-trust-mesh/blob/main/SPECIFICATION.md">Specification</a></li>
+        <li><a href="https://github.com/yorkerhodes3/sovereign-agent-trust-mesh/blob/main/BACKLOG.md">Backlog</a></li>
+      </ul>
+    </div>
+    <div>
+      <p class="muted"><strong>Builds on</strong></p>
+      <ul>
+        <li><a href="https://github.com/google/sam">Google SAM</a></li>
+        <li><a href="https://ercs.ethereum.org/ERCS/erc-8004">ERC-8004</a></li>
+        <li><a href="https://eips.ethereum.org/EIPS/eip-8226">ERC-8226</a></li>
+      </ul>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>

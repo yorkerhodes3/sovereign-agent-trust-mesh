@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How it works — Sovereign Agent Trust Mesh</title>
+<meta name="description" content="The Agent Mesh Binding checks B1–B15, the Call Attestation checks V1–V8, and why the ordering of each is load-bearing rather than cosmetic.">
+<link rel="stylesheet" href="assets/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🕸️</text></svg>">
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+
+<header class="site-header">
+  <div class="site-header__inner">
+    <a class="brand" href="index.html">satm<span>://</span></a>
+    <nav class="site-nav" aria-label="Main">
+      <a href="index.html">Overview</a>
+      <a href="how-it-works.html" aria-current="page">How it works</a>
+      <a href="evidence.html">Evidence</a>
+      <a href="architecture.html">Architecture</a>
+      <a href="https://github.com/yorkerhodes3/sovereign-agent-trust-mesh">GitHub&nbsp;↗</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+
+  <div class="hero">
+    <p class="eyebrow">How it works</p>
+    <h1>Two mechanisms, twenty-three checks</h1>
+    <p class="lede">
+      Admission is governed by the Agent Mesh Binding and its fifteen checks. Every individual
+      tool call is governed by the Call Attestation and its eight. In both cases the
+      <em>order</em> of the checks is part of the security argument, not an implementation detail.
+    </p>
+  </div>
+
+  <!-- ==================================================================== -->
+  <section id="binding">
+    <div class="prose">
+      <p class="kicker">Mechanism one · admission</p>
+      <h2>The Agent Mesh Binding</h2>
+      <p>
+        An agent operator builds one canonical document, signs it with the node&rsquo;s libp2p host
+        key and with the ERC-8004 <code>agentWallet</code>, and submits it to the broker. The
+        broker runs checks B1 through B15 <strong>in order</strong> and denies on the first
+        failure, returning a stable reason code.
+      </p>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Check</th><th>What it establishes</th><th>Reason code on failure</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>B1</strong></td>
+            <td>Freshness, and a <em>bounded</em> lifetime — <code>expiresAt ≤ issuedAt + maxTTL</code></td>
+            <td><code>expired</code> · <code>ttl_too_long</code></td>
+          </tr>
+          <tr>
+            <td><strong>B2</strong></td>
+            <td>The document names <em>this</em> mesh and control plane</td>
+            <td><code>wrong_mesh</code></td>
+          </tr>
+          <tr>
+            <td><strong>B2a</strong></td>
+            <td>The registry is on the broker&rsquo;s allow-list — checked <em>before any chain read</em></td>
+            <td><code>registry_not_allowed</code></td>
+          </tr>
+          <tr>
+            <td><strong>B3</strong></td>
+            <td>The nonce has not been seen (checked here, consumed at B15)</td>
+            <td><code>nonce_reused</code></td>
+          </tr>
+          <tr>
+            <td><strong>B4 · B5</strong></td>
+            <td>The public key derives the claimed PeerID, and the signature verifies</td>
+            <td><code>peer_key_mismatch</code></td>
+          </tr>
+          <tr>
+            <td><strong>B6 · B7 · B8</strong></td>
+            <td>The agent exists on chain, its <code>agentWallet</code> is set, and it matches the document</td>
+            <td><code>agent_wallet_unset</code></td>
+          </tr>
+          <tr>
+            <td><strong>B9</strong></td>
+            <td>EIP-712 signature from that wallet — EOA or ERC-1271 contract wallet</td>
+            <td><code>wallet_signature_invalid</code></td>
+          </tr>
+          <tr>
+            <td><strong>B9a</strong></td>
+            <td>The wallet is not already bound to a different agent</td>
+            <td><code>wallet_bound_elsewhere</code></td>
+          </tr>
+          <tr>
+            <td><strong>B10–B14</strong></td>
+            <td>The on-chain registration file independently names this agent, advertises this peer on this mesh, and is active</td>
+            <td><code>sam_endpoint_missing</code></td>
+          </tr>
+          <tr>
+            <td><strong>B15</strong></td>
+            <td>Atomic commit: consume the nonce, retire any prior binding, insert — in one transaction</td>
+            <td><code>nonce_reused</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Three places where the ordering is load-bearing</h3>
+
+    <ol class="steps">
+      <li>
+        <h4>B2a comes before any chain read</h4>
+        <p>
+          If the document&rsquo;s own <code>agentRegistry</code> were trusted, an attacker could
+          deploy an ERC-8004-shaped contract, mint themselves <code>agentId 42</code> with a wallet
+          they control, and satisfy B6–B9 against their own registry. Every chain call and the
+          EIP-712 domain are therefore derived from the <em>matched allow-list entry</em>, never
+          from the submission.
+        </p>
+      </li>
+      <li>
+        <h4>B3 checks, B15 consumes</h4>
+        <p>
+          Consuming the nonce before signature verification would let an unauthenticated caller
+          burn arbitrary nonces belonging to someone else. But merely <em>checking</em> without an
+          atomic insert would let two concurrent submissions both pass B3 and both commit. The
+          split resolves both, and a 32-way concurrency test proves exactly one submission wins.
+        </p>
+      </li>
+      <li>
+        <h4>B1 enforces an upper bound, not just an expiry</h4>
+        <p>
+          Without <code>expiresAt ≤ issuedAt + maxTTL</code> a signer could self-issue a
+          decade-long binding that outlives the nonce retention window — after which the document
+          becomes replayable. The configuration validator refuses to start if
+          <code>nonceRetention</code> is not greater than <code>maxTTL</code>.
+        </p>
+      </li>
+    </ol>
+  </section>
+
+  <!-- ==================================================================== -->
+  <section id="attestation">
+    <div class="prose">
+      <p class="kicker">Mechanism two · every call</p>
+      <h2>The Call Attestation</h2>
+      <p>
+        A binding says who an agent <em>is</em>. It does not, by itself, tell a responding service
+        who is calling it right now — because of a property of SAM that was measured rather than
+        assumed.
+      </p>
+    </div>
+
+    <figure>
+      <img src="assets/diagrams/attestation.svg"
+           alt="Diagram: SAM authenticates the caller at the transport layer, but sam-node forwards the raw stream to a local MCP service as a dumb-pipe proxy and discards the caller identity. The Call Attestation restores it by travelling inside the request payload.">
+      <figcaption>
+        Spike S-5 established this empirically. <code>sam-node</code> authenticates the peer with
+        Biscuit tokens, then forwards the raw stream to a locally spawned service via
+        <code>HandleStreamPassThrough</code>. The request context carries the caller&rsquo;s PeerID
+        but uses it only to select the target service, then discards it. The spawned subprocess
+        sees no <code>SAM_*</code> environment variables.
+      </figcaption>
+    </figure>
+
+    <div class="note note--warn">
+      <p class="note__title">Why this is necessary, not defence in depth</p>
+      <p>
+        If the sidecar simply trusted a <code>peerId</code> field in the request body,
+        <strong>any caller could name someone else&rsquo;s agent</strong> and inherit its trust
+        tier and spending authority. The attestation is the only mechanism by which an inbound
+        sidecar learns who called.
+      </p>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Check</th><th>What it prevents</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><strong>V1</strong></td><td>Cross-mesh replay — mesh and control plane must be ours</td></tr>
+          <tr><td><strong>V2</strong></td><td>Replay at a <em>different callee</em>, or after this agent re-bound</td></tr>
+          <tr><td><strong>V3</strong></td><td>Escalating a cheap read-tool attestation into an asset-moving call</td></tr>
+          <tr><td><strong>V4</strong></td><td>Body substitution — <code>argsHash</code> must match the received arguments</td></tr>
+          <tr><td><strong>V5</strong></td><td>Forgery by someone who knows every public field but holds no key</td></tr>
+          <tr><td><strong>V6</strong></td><td>Use of a revoked or superseded binding</td></tr>
+          <tr><td><strong>V7</strong></td><td>Long-lived replay, and self-issued long TTLs</td></tr>
+          <tr><td><strong>V8</strong></td><td>Concurrent replay — the nonce is consumed atomically before forwarding</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Two design points worth understanding</h3>
+
+    <div class="grid grid--2">
+      <div class="card">
+        <span class="card__label">V6 · revocation without a revocation list</span>
+        <h3>The binding id is a key epoch</h3>
+        <p class="small muted">
+          The caller&rsquo;s <code>callerBindingId</code> sits <em>inside</em> the signature and
+          must be their current binding. Re-binding an agent — which the broker does atomically at
+          B15 — invalidates every outstanding attestation signed under the old sidecar key. No
+          revocation list is needed because the check is against liveness, not against a
+          blocklist.
+        </p>
+      </div>
+      <div class="card">
+        <span class="card__label">V8 · runs last, deliberately</span>
+        <h3>Consuming a nonce is a side effect</h3>
+        <p class="small muted">
+          Doing it before signature verification would let an unauthenticated caller burn nonces
+          belonging to a binding it does not control. A test asserts a failed verification consumes
+          nothing, and that the legitimate holder can still use that nonce afterwards.
+        </p>
+      </div>
+    </div>
+
+    <h3>Why inbound and outbound take different inputs</h3>
+    <div class="prose">
+      <p>
+        An earlier draft used one schema requiring an attestation in both directions. That is
+        impossible: the initiator must be <em>authorized</em> before it mints an attestation, so
+        the attestation cannot be an input to its own authorization. The order is
+        <strong>authorize → mint → send</strong>.
+      </p>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th></th><th>Outbound</th><th>Inbound</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Question</td>
+            <td>&ldquo;May I call this peer?&rdquo;</td>
+            <td>&ldquo;May this caller call me?&rdquo;</td>
+          </tr>
+          <tr>
+            <td>Peer identity</td>
+            <td><code>peer.peerId</code>, resolved <em>by the broker</em></td>
+            <td><code>peer.attestation</code>, verified per V1–V8</td>
+          </tr>
+          <tr>
+            <td>Attestation</td>
+            <td>an <strong>output</strong></td>
+            <td>an <strong>input</strong></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="note">
+      <p class="note__title">A small detail that matters</p>
+      <p>
+        The authorize request type has <strong>no <code>self</code> field at all</strong>, and
+        unknown fields are rejected. A caller attempting to declare its own identity fails loudly
+        rather than being silently ignored. The responder&rsquo;s identity comes from its own
+        configuration and binding record.
+      </p>
+    </div>
+  </section>
+
+  <!-- ==================================================================== -->
+  <section id="reconciliation">
+    <div class="prose">
+      <p class="kicker">Mechanism three · staying true over time</p>
+      <h2>Reconciliation</h2>
+      <p>
+        A binding is verified once at admission, but the facts it rests on can change afterwards
+        with no signal at the broker. The agent NFT is sold. The registration file is edited to
+        drop the SAM service entry. The agent is marked inactive. Without reconciliation, a sold
+        agent keeps its access until its Biscuit expires.
+      </p>
+      <p>
+        The reconciler sweeps active bindings and re-runs the post-admission checks, using
+        <strong>the same check implementations as admission</strong>. A second implementation would
+        drift, and a reconciler more permissive than the admission path is worse than none — it
+        would report everything healthy while the invariant it protects had already broken.
+      </p>
+    </div>
+
+    <div class="note note--ok">
+      <p class="note__title">The distinction that keeps the mesh up</p>
+      <p>
+        <strong>&ldquo;Could not check&rdquo; and &ldquo;checked and failed&rdquo; are not the same
+        thing.</strong> Only a genuine verdict revokes. RPC outages, unreachable registration
+        hosts, and <em>unclassified</em> errors all leave bindings in place and log loudly.
+        Treating an outage as a verdict would let one bad afternoon at a provider revoke the entire
+        mesh — far worse than briefly trusting a stale binding.
+      </p>
+    </div>
+
+    <div class="prose">
+      <h3>Two smaller decisions in the same spirit</h3>
+      <ul>
+        <li>
+          <strong>Revoke locally first, then tell the control plane.</strong> The store is
+          authoritative, so a control-plane outage must not leave a sold agent trusted by the
+          broker.
+        </li>
+        <li>
+          <strong>The nonce is never released.</strong> A revoked binding&rsquo;s document is still
+          validly signed, so recycling its nonce would let the agent re-admit itself with the very
+          document that was just revoked.
+        </li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ==================================================================== -->
+  <section id="deeper">
+    <div class="prose">
+      <h2>Going deeper</h2>
+      <p>
+        The full specification is around 111&nbsp;KB and is the design of record. The sections
+        most worth reading directly:
+      </p>
+      <ul>
+        <li><a href="https://github.com/yorkerhodes3/sovereign-agent-trust-mesh/blob/main/SPECIFICATION.md">§4 — the Agent Mesh Binding</a>, including the document schema and all fifteen checks</li>
+        <li><a href="https://github.com/yorkerhodes3/sovereign-agent-trust-mesh/blob/main/SPECIFICATION.md">§6.3.3 — Call Attestation</a>, including the eight verifier checks</li>
+        <li><a href="https://github.com/yorkerhodes3/sovereign-agent-trust-mesh/blob/main/SPECIFICATION.md">§13 — the threat model</a>, twenty-seven threats and their mitigations</li>
+      </ul>
+      <div class="buttons">
+        <a class="btn btn--primary" href="evidence.html">What&rsquo;s actually proven</a>
+        <a class="btn" href="architecture.html">Architecture</a>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer class="site-footer">
+  <div class="site-footer__inner">
+    <div>
+      <p><strong>Sovereign Agent Trust Mesh</strong><br>
+      <span class="muted">A research prototype. Apache-2.0.</span></p>
+    </div>
+    <div>
+      <p class="muted"><strong>Repository</strong></p>
+      <ul>
+        <li><a href="https://github.com/yorkerhodes3/sovereign-agent-trust-mesh">Source on GitHub</a></li>
+        <li><a href="https://github.com/yorkerhodes3/sovereign-agent-trust-mesh/blob/main/SPECIFICATION.md">Specification</a></li>
+        <li><a href="https://github.com/yorkerhodes3/sovereign-agent-trust-mesh/blob/main/BACKLOG.md">Backlog</a></li>
+      </ul>
+    </div>
+    <div>
+      <p class="muted"><strong>Builds on</strong></p>
+      <ul>
+        <li><a href="https://github.com/google/sam">Google SAM</a></li>
+        <li><a href="https://ercs.ethereum.org/ERCS/erc-8004">ERC-8004</a></li>
+        <li><a href="https://eips.ethereum.org/EIPS/eip-8226">ERC-8226</a></li>
+      </ul>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>

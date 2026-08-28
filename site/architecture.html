@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Architecture — Sovereign Agent Trust Mesh</title>
+<meta name="description" content="Six planes, five components, two-sided enforcement, and a threat model with twenty-seven entries.">
+<link rel="stylesheet" href="assets/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🕸️</text></svg>">
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+
+<header class="site-header">
+  <div class="site-header__inner">
+    <a class="brand" href="index.html">satm<span>://</span></a>
+    <nav class="site-nav" aria-label="Main">
+      <a href="index.html">Overview</a>
+      <a href="how-it-works.html">How it works</a>
+      <a href="evidence.html">Evidence</a>
+      <a href="architecture.html" aria-current="page">Architecture</a>
+      <a href="https://github.com/yorkerhodes3/sovereign-agent-trust-mesh">GitHub&nbsp;↗</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+
+  <div class="hero">
+    <p class="eyebrow">Architecture</p>
+    <h1>Six planes, enforced at two independent points</h1>
+    <p class="lede">
+      The system separates <em>who you are</em> from <em>how much you are trusted</em> from
+      <em>what you are permitted to do right now</em>. Conflating those is how agent systems end up
+      with a single point of failure.
+    </p>
+  </div>
+
+  <!-- ==================================================================== -->
+  <section id="planes">
+    <div class="prose">
+      <p class="kicker">Structure</p>
+      <h2>The six planes</h2>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Plane</th><th>Answers</th><th>Built on</th><th>State</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Communication</strong></td>
+            <td>Can these two agents reach each other at all?</td>
+            <td>SAM, libp2p, Biscuit, MCP</td>
+            <td><span class="badge badge--ok">upstream</span></td>
+          </tr>
+          <tr>
+            <td><strong>Identity</strong></td>
+            <td>Who is this agent, and does it really control that PeerID?</td>
+            <td>ERC-8004 + the Agent Mesh Binding</td>
+            <td><span class="badge badge--ok">built</span></td>
+          </tr>
+          <tr>
+            <td><strong>Trust</strong></td>
+            <td>How much should I rely on it?</td>
+            <td>ERC-8004 reputation &amp; validation</td>
+            <td><span class="badge badge--neutral">specified</span></td>
+          </tr>
+          <tr>
+            <td><strong>Compliance</strong></td>
+            <td>Is it permitted to do this specific thing, right now?</td>
+            <td>ERC-8226 / RAMS mandates</td>
+            <td><span class="badge badge--neutral">specified</span></td>
+          </tr>
+          <tr>
+            <td><strong>Settlement</strong></td>
+            <td>Did value actually move, and can that be proven?</td>
+            <td>Escrow in a test stablecoin</td>
+            <td><span class="badge badge--neutral">specified</span></td>
+          </tr>
+          <tr>
+            <td><strong>Audit</strong></td>
+            <td>What happened, and who can verify it later?</td>
+            <td>Hash-chained evidence, L1 anchoring</td>
+            <td><span class="badge badge--neutral">specified</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="note">
+      <p class="note__title">Why identity and authority are kept separate</p>
+      <p>
+        Trust tier and mandate are two <em>independent</em> axes. An agent can be highly reputable
+        (T3) and hold no authority to move a particular asset; another can hold a valid mandate and
+        still be too new to be trusted with a large job. Collapsing them into one score would make
+        both meaningless.
+      </p>
+    </div>
+  </section>
+
+  <!-- ==================================================================== -->
+  <section id="components">
+    <div class="prose">
+      <p class="kicker">Runtime</p>
+      <h2>Components</h2>
+      <p>
+        Everything SATM adds sits <em>beside</em> SAM rather than inside it. There is no fork —
+        integration uses documented HTTP endpoints and configuration only, which is
+        <a href="https://github.com/yorkerhodes3/sovereign-agent-trust-mesh/blob/main/docs/adr/0001-integrate-via-control-plane-not-fork.md">ADR-0001</a>.
+      </p>
+    </div>
+
+    <pre><code>   ORG A                          ORG B
+ ┌─────────┐                    ┌─────────┐
+ │  Agent  │                    │  Agent  │
+ └────┬────┘                    └────▲────┘
+      │ MCP                          │ MCP
+ ┌────▼──────────┐              ┌────┴──────────┐
+ │ satm-sidecar  │  tier + mandate checks       │
+ └────┬──────────┘              └────▲──────────┘
+      │ MCP                          │ MCP
+ ┌────▼────┐   libp2p / Noise   ┌────┴────┐
+ │sam-node │◄══════════════════►│sam-node │
+ └────┬────┘  Biscuit-authorized└────┬────┘
+      │                              │
+      └──────► sam-control-plane ◄───┘
+                     ▲
+                     │ approve / policies / revoke
+              ┌──────┴───────┐
+              │ satm-broker  │◄── satm-indexer ──┐
+              └──────┬───────┘                   │
+                     │ anchor                    │ logs
+                     ▼                           │
+              L1: AuditAnchor        L2: ERC-8004 registries,
+                                         RAMS mandate, regulated
+                                         asset, settlement escrow</code></pre>
+
+    <div class="grid grid--2">
+      <div class="card card--ok">
+        <span class="card__label">built &amp; tested</span>
+        <h3><code>satm-broker</code></h3>
+        <p class="small muted">
+          Verifies bindings (B1–B15), stores them, gates enrollment, and runs the reconciliation
+          loop that revokes bindings whose on-chain basis has changed.
+        </p>
+      </div>
+      <div class="card card--warn">
+        <span class="card__label">inbound built · outbound pending</span>
+        <h3><code>satm-sidecar</code></h3>
+        <p class="small muted">
+          Sits beside each agent. Verifies inbound Call Attestations (V1–V8). Will enforce trust
+          tiers and evaluate mandates once those planes exist.
+        </p>
+      </div>
+      <div class="card card--neutral">
+        <span class="card__label">not started</span>
+        <h3><code>satm-indexer</code></h3>
+        <p class="small muted">
+          Watches chain events, maintains trust tiers, handles reorgs by rolling back to the last
+          common ancestor and replaying.
+        </p>
+      </div>
+      <div class="card card--ok">
+        <span class="card__label">built &amp; tested</span>
+        <h3>Contracts</h3>
+        <p class="small muted">
+          ERC-8004 registries vendored at a pinned commit, with CI enforcing byte-identity. SATM's
+          own contracts are written in Foundry.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================================================================== -->
+  <section id="enforcement">
+    <div class="prose">
+      <p class="kicker">Defence</p>
+      <h2>Two-sided enforcement</h2>
+      <p>
+        Every consequential decision is checked at two independent points, chosen so that
+        compromising one does not defeat the other.
+      </p>
+    </div>
+
+    <div class="grid grid--2">
+      <div class="card">
+        <span class="card__label">Point one · admission</span>
+        <h3>Can this peer be on the mesh at all?</h3>
+        <p class="small muted">
+          The broker gates enrollment on a verified binding, and the control plane attests labels
+          into the peer&rsquo;s Biscuit. SAM&rsquo;s own node-level Datalog then enforces those
+          labels at the transport handshake — verified in spike S-2.
+        </p>
+      </div>
+      <div class="card">
+        <span class="card__label">Point two · use</span>
+        <h3>May this specific call proceed?</h3>
+        <p class="small muted">
+          The sidecar checks the attestation, the tier, and the mandate. But the
+          <strong>authoritative</strong> check for anything moving an asset is on-chain: the
+          asset&rsquo;s own transfer hook validates the mandate atomically with the transfer.
+        </p>
+      </div>
+    </div>
+
+    <div class="note note--ok">
+      <p class="note__title">Why the on-chain check is the one that counts</p>
+      <p>
+        A compromised broker or sidecar can admit a peer it should not, or approve a call it should
+        not. Neither can move an asset, because the asset contract re-evaluates authority itself
+        and reverts. That is what keeps broker compromise a
+        <em>denial-of-service and evidence-integrity</em> problem rather than a
+        <em>loss-of-funds</em> problem.
+      </p>
+    </div>
+  </section>
+
+  <!-- ==================================================================== -->
+  <section id="threats">
+    <div class="prose">
+      <p class="kicker">Threat model</p>
+      <h2>What must fail, and where</h2>
+      <p>
+        The threat model has twenty-seven entries. The demo scripts eighteen of them as
+        <strong>negative controls</strong> — each one an attack that must be denied at a named
+        layer, committed to in advance so a denial cannot be retrofitted.
+      </p>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th></th><th>Attack</th><th>Denied by</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>N-1</td><td>Unbound node joins the mesh</td><td>Broker enrollment gate</td></tr>
+          <tr><td>N-2</td><td>Node claims another agent&rsquo;s <code>agentId</code></td><td>Check B9 — wallet signature</td></tr>
+          <tr><td>N-3</td><td>Under-tiered caller reaches a custody service</td><td>Node attenuation + sidecar</td></tr>
+          <tr><td>N-7</td><td>Agent NFT sold to an attacker</td><td><code>agentWallet</code> cleared → binding revoked</td></tr>
+          <tr><td>N-9</td><td>Binding replayed on another mesh</td><td>Signed <code>meshId</code> + single-use nonce</td></tr>
+          <tr><td>N-10</td><td>Chain RPC unavailable</td><td>Degraded mode denies</td></tr>
+          <tr><td>N-11</td><td>Binding names an attacker-deployed registry</td><td>Registry allow-list (B2a)</td></tr>
+          <tr><td>N-13</td><td>Caller spoofs its own identity to the broker</td><td><code>self</code> taken from the authenticated channel</td></tr>
+          <tr><td>N-16</td><td>Old wallet registers a fresh <code>agentId</code> to reuse a stale mandate</td><td>Immutable on-chain agent-identity pin</td></tr>
+          <tr><td>N-17</td><td>Agent wallet moves tokens via ERC-20 <code>transferFrom</code></td><td>Asset is transfer-restricted; no open paths</td></tr>
+          <tr><td>N-18</td><td>Read-tool attestation presented to an asset tool</td><td>Signed <code>service</code>/<code>tool</code> compared to the request</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p class="prose small muted">
+      Eleven of eighteen shown.
+      <a href="https://github.com/yorkerhodes3/sovereign-agent-trust-mesh/blob/main/README.md">See the full list →</a>
+    </p>
+  </section>
+
+  <!-- ==================================================================== -->
+  <section id="decisions">
+    <div class="prose">
+      <p class="kicker">Decisions</p>
+      <h2>The choices that shaped everything else</h2>
+    </div>
+
+    <div class="grid grid--2">
+      <div class="card">
+        <span class="card__label">ADR-0001</span>
+        <h3>No fork of SAM</h3>
+        <p class="small muted">
+          Integration is via documented HTTP endpoints and configuration only. This constrains the
+          design — and it is why a discovered upstream defect was
+          <a href="https://github.com/google/sam/issues/297">reported</a> rather than patched
+          around in the product.
+        </p>
+      </div>
+      <div class="card">
+        <span class="card__label">ADR-0003</span>
+        <h3><code>agentWallet</code> is the RAMS agent address</h3>
+        <p class="small muted">
+          Reusing one address as both the ERC-8004 wallet and the ERC-8226 agent is what makes
+          selling an agent revoke its <em>authority</em> as well as its mesh access, with no extra
+          machinery.
+        </p>
+      </div>
+      <div class="card">
+        <span class="card__label">ADR-0005</span>
+        <h3>Two-sided enforcement</h3>
+        <p class="small muted">
+          Admission and use are checked independently, and the authoritative check for asset
+          movement is on-chain.
+        </p>
+      </div>
+      <div class="card">
+        <span class="card__label">ADR-0004</span>
+        <h3>Foundry with vendored registries</h3>
+        <p class="small muted">
+          ERC-8004 contracts are vendored at a pinned commit with CI enforcing byte-identity, so an
+          upstream change cannot silently alter what was tested.
+        </p>
+      </div>
+    </div>
+
+    <div class="buttons">
+      <a class="btn btn--primary" href="https://github.com/yorkerhodes3/sovereign-agent-trust-mesh/tree/main/docs/adr">Read the ADRs</a>
+      <a class="btn" href="evidence.html">What&rsquo;s proven</a>
+    </div>
+  </section>
+
+</main>
+
+<footer class="site-footer">
+  <div class="site-footer__inner">
+    <div>
+      <p><strong>Sovereign Agent Trust Mesh</strong><br>
+      <span class="muted">A research prototype. Apache-2.0.</span></p>
+    </div>
+    <div>
+      <p class="muted"><strong>Repository</strong></p>
+      <ul>
+        <li><a href="https://github.com/yorkerhodes3/sovereign-agent-trust-mesh">Source on GitHub</a></li>
+        <li><a href="https://github.com/yorkerhodes3/sovereign-agent-trust-mesh/blob/main/SPECIFICATION.md">Specification</a></li>
+        <li><a href="https://github.com/yorkerhodes3/sovereign-agent-trust-mesh/tree/main/docs/adr">Decision records</a></li>
+      </ul>
+    </div>
+    <div>
+      <p class="muted"><strong>Builds on</strong></p>
+      <ul>
+        <li><a href="https://github.com/google/sam">Google SAM</a></li>
+        <li><a href="https://ercs.ethereum.org/ERCS/erc-8004">ERC-8004</a></li>
+        <li><a href="https://eips.ethereum.org/EIPS/eip-8226">ERC-8226</a></li>
+      </ul>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>

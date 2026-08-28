@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Evidence — Sovereign Agent Trust Mesh</title>
+<meta name="description" content="What was measured against a real SAM mesh, what changed as a result, and an honest separation of what is proven from what is merely specified.">
+<link rel="stylesheet" href="assets/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🕸️</text></svg>">
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+
+<header class="site-header">
+  <div class="site-header__inner">
+    <a class="brand" href="index.html">satm<span>://</span></a>
+    <nav class="site-nav" aria-label="Main">
+      <a href="index.html">Overview</a>
+      <a href="how-it-works.html">How it works</a>
+      <a href="evidence.html" aria-current="page">Evidence</a>
+      <a href="architecture.html">Architecture</a>
+      <a href="https://github.com/yorkerhodes3/sovereign-agent-trust-mesh">GitHub&nbsp;↗</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+
+  <div class="hero">
+    <p class="eyebrow">Evidence</p>
+    <h1>What&rsquo;s proven, and what isn&rsquo;t</h1>
+    <p class="lede">
+      A design document can claim anything. This page separates what an automated test
+      demonstrates from what was measured once by hand, and both of those from what is currently
+      just specified.
+    </p>
+    <p class="lede">
+      Two of the five upstream assumptions turned out to be <strong>wrong</strong>, and the design
+      changed rather than the finding being explained away.
+    </p>
+  </div>
+
+  <!-- ==================================================================== -->
+  <section id="tests">
+    <div class="prose">
+      <p class="kicker">Tier one</p>
+      <h2>Proven by automated test</h2>
+      <p>
+        These run on every push. If any of them breaks, the claim it supports stops being true and
+        CI says so.
+      </p>
+    </div>
+
+    <div class="stats">
+      <div class="stat">
+        <div class="stat__value">227</div>
+        <div class="stat__label">automated tests</div>
+      </div>
+      <div class="stat">
+        <div class="stat__value">189</div>
+        <div class="stat__label">Go unit tests</div>
+      </div>
+      <div class="stat">
+        <div class="stat__value">20</div>
+        <div class="stat__label">against a live chain</div>
+      </div>
+      <div class="stat">
+        <div class="stat__value">18</div>
+        <div class="stat__label">Solidity contract tests</div>
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Claim</th><th>How it is proven</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Selling an agent revokes its mesh access</strong></td>
+            <td>
+              A live-chain test registers an agent, binds it, transfers the NFT with
+              <code>cast</code>, asserts the on-chain wallet actually cleared, then asserts the
+              next sweep revokes with reason <code>agent_wallet_unset</code>.
+            </td>
+          </tr>
+          <tr>
+            <td><strong>An attacker-deployed registry is refused</strong></td>
+            <td>
+              The test builds a submission where <em>every other check passes</em> — the attacker
+              controls their own registry, agent and wallet, and both signatures are valid. Only
+              B2a stops it.
+            </td>
+          </tr>
+          <tr>
+            <td><strong>Nonce consumption is genuinely atomic</strong></td>
+            <td>
+              32 goroutines race one nonce; exactly one commits. Run under
+              <code>-race</code> in CI, and against a real PostgreSQL service container as well as
+              the in-memory store.
+            </td>
+          </tr>
+          <tr>
+            <td><strong>A read-tool attestation cannot reach an asset tool</strong></td>
+            <td>
+              A genuine, correctly signed attestation for <code>quote_treasury_note</code> is
+              presented against <code>subscribe_treasury_note</code> and denied at V3.
+            </td>
+          </tr>
+          <tr>
+            <td><strong>An RPC outage does not revoke the mesh</strong></td>
+            <td>
+              The reconciler is pointed at a dead endpoint. It revokes nothing and reports the
+              failure, rather than treating unreachability as a verdict.
+            </td>
+          </tr>
+          <tr>
+            <td><strong>Hand-rolled ABI encoding reaches the right functions</strong></td>
+            <td>
+              Live calls against deployed ERC-8004 bytecode.
+              <code>getAgentWallet(uint256)</code> has no publicly documented selector to pin
+              against, so only a real call could catch a derivation bug.
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="note">
+      <p class="note__title">On negative controls</p>
+      <p>
+        Roughly half of these are tests that something <em>fails</em>. A trust prototype that only
+        demonstrates the happy path proves nothing — the scripted demo includes
+        <strong>18 named attacks</strong>, each of which must be denied at a specific,
+        pre-committed layer.
+      </p>
+    </div>
+  </section>
+
+  <!-- ==================================================================== -->
+  <section id="spikes">
+    <div class="prose">
+      <p class="kicker">Tier two</p>
+      <h2>Measured against a real mesh</h2>
+      <p>
+        Before the design leaned on any SAM behaviour, five spikes tested it against a running
+        mesh — one control plane, one router, three nodes. Rather than reading the documentation,
+        the source was read directly and then the behaviour was reproduced.
+      </p>
+    </div>
+
+    <div class="grid grid--2">
+
+      <div class="card card--ok">
+        <span class="card__label">S-2 · the load-bearing one · PASSED</span>
+        <h3>Node attenuation evaluates the caller&rsquo;s labels</h3>
+        <p class="small muted">
+          A peer attesting <code>agent_id=42</code> received the full tool catalogue. A peer
+          attesting <code>777</code> was refused before any payload was read.
+        </p>
+        <pre><code>[Auth] AuthZ Denied 12D3KooWGRdG…:
+  biscuit: verification failed:
+  failed to verify check #1:
+  check if label("erc8004.agent_id", "42")</code></pre>
+        <p class="small muted">
+          <strong>Stronger than specified:</strong> it also gates the service catalogue, so a
+          denied caller cannot even enumerate what a node offers.
+        </p>
+      </div>
+
+      <div class="card card--warn">
+        <span class="card__label">S-1 · changed the design</span>
+        <h3>The specified &ldquo;primary path&rdquo; does not exist</h3>
+        <p class="small muted">
+          The specification described the broker supplying labels in the approve call. That
+          mechanism is not in SAM. Labels are declared by the node
+          (<code>sam-node run --labels</code>, and the flag is on <code>run</code>, not
+          <code>join</code>) and attested by the admin at approval — approve takes an
+          <em>empty body</em>.
+        </p>
+        <p class="small muted">
+          The trust property is unchanged, since approval is still the gate. But §6.1.3 was wrong
+          and was rewritten.
+        </p>
+      </div>
+
+      <div class="card card--warn">
+        <span class="card__label">S-5 · changed the design</span>
+        <h3>Caller identity never reaches a local service</h3>
+        <p class="small muted">
+          <code>sam-node</code> forwards the raw stream to a locally spawned MCP service as a
+          dumb-pipe proxy and discards the caller&rsquo;s PeerID. The subprocess sees no
+          <code>SAM_*</code> environment variables.
+        </p>
+        <p class="small muted">
+          This promoted the Call Attestation from optional hardening to
+          <strong>the only mechanism</strong> by which an inbound sidecar learns who called.
+        </p>
+      </div>
+
+      <div class="card card--ok">
+        <span class="card__label">S-3 · better than assumed</span>
+        <h3>Initiator-side verification exists</h3>
+        <p class="small muted">
+          The spec had treated this as unavailable and deliberately did not rely on it. In fact
+          <code>call_remote_tool</code> accepts a <code>required_labels</code> argument and fails
+          closed. It is opt-in per call, so it is a genuine second layer rather than a default
+          safety net.
+        </p>
+      </div>
+
+    </div>
+
+    <div class="note note--warn">
+      <p class="note__title">A defect found, and reported upstream</p>
+      <p>
+        Bootstrap enrollment cannot complete on current upstream: <code>sam-node</code> POSTs to
+        <code>/enroll/status</code> while the server accepts only GET, so the request 405s forever.
+        This was re-verified at upstream <code>674af93</code> before filing as
+        <a href="https://github.com/google/sam/issues/297">google/sam#297</a>. SATM does not fork
+        SAM, so the one-line fix exists only in a local scratch clone used for spikes.
+      </p>
+    </div>
+
+    <p class="prose">
+      <a href="https://github.com/yorkerhodes3/sovereign-agent-trust-mesh/blob/main/docs/SPIKE-FINDINGS.md">Full spike findings, with reproduction steps →</a>
+    </p>
+  </section>
+
+  <!-- ==================================================================== -->
+  <section id="unproven">
+    <div class="prose">
+      <p class="kicker">Tier three</p>
+      <h2>Specified, but not yet proven</h2>
+      <p>
+        The honest half of the page. These are designed, and in some cases written, but nothing
+        automated demonstrates them yet.
+      </p>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Area</th><th>Status</th><th>What would close it</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Outbound authorization</td>
+            <td><span class="badge badge--warn">returns 501</span></td>
+            <td>Needs broker <code>peerId → binding</code> resolution and tier lookup — the trust plane. It fails closed, and a test asserts it never returns an allow.</td>
+          </tr>
+          <tr>
+            <td>Mesh revocation propagation</td>
+            <td><span class="badge badge--warn">local only</span></td>
+            <td>The reconciler revokes locally, which is authoritative for the broker, but the peer keeps its Biscuit until expiry. Needs the control-plane <code>/admin/revoke</code> call.</td>
+          </tr>
+          <tr>
+            <td>Trust tiers T0–T3</td>
+            <td><span class="badge badge--neutral">specified</span></td>
+            <td>Phase 3. Attestation proves <em>who</em> is calling; nothing yet decides whether they are allowed.</td>
+          </tr>
+          <tr>
+            <td>ERC-8226 mandates</td>
+            <td><span class="badge badge--neutral">specified</span></td>
+            <td>Phase 4. No public reference implementation exists, so it will be built from the EIP text with one conformance test per MUST clause.</td>
+          </tr>
+          <tr>
+            <td>Settlement &amp; L1 anchoring</td>
+            <td><span class="badge badge--neutral">specified</span></td>
+            <td>Phase 5.</td>
+          </tr>
+          <tr>
+            <td>Docker compose stack</td>
+            <td><span class="badge badge--danger">never executed</span></td>
+            <td>No Docker in the development environment. Corrected from spike findings but labelled unverified in-file.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ==================================================================== -->
+  <section id="claims">
+    <div class="prose">
+      <p class="kicker">Corrections</p>
+      <h2>Claims that were narrowed</h2>
+      <p>
+        Two statements in earlier drafts were overstated. Both were caught in review and made
+        precise rather than quietly dropped.
+      </p>
+    </div>
+
+    <div class="grid grid--2">
+      <div class="card">
+        <span class="card__label">Before</span>
+        <h3>&ldquo;The system fails closed&rdquo;</h3>
+        <p class="small muted">
+          Too broad to be true. <strong>Now stated in two tiers:</strong> asset-moving
+          authorization fails closed unconditionally; everything else fails closed except within
+          explicitly bounded, logged staleness windows.
+        </p>
+      </div>
+      <div class="card">
+        <span class="card__label">Before</span>
+        <h3>&ldquo;L1 anchoring makes the audit trail tamper-proof&rdquo;</h3>
+        <p class="small muted">
+          Anchoring proves <em>inclusion</em> and post-anchor immutability. It does not stop a
+          compromised broker omitting an entry before anchoring. Omission is
+          <strong>detectable</strong> via counterparty receipts — not prevented.
+        </p>
+      </div>
+    </div>
+
+    <div class="note">
+      <p class="note__title">Residual risk, stated rather than hidden</p>
+      <p>
+        A compromised broker can deny service, admit an unbound peer to the mesh, and fabricate or
+        omit evidence before anchoring. <strong>It cannot move assets</strong> — that requires
+        on-chain authority it does not hold. This is recorded as accepted residual risk in the
+        threat model rather than argued away.
+      </p>
+    </div>
+  </section>
+
+  <!-- ==================================================================== -->
+  <section id="ci">
+    <div class="prose">
+      <h2>How to check any of this yourself</h2>
+      <p>
+        Everything above is reproducible. CI runs three jobs on every push: unit tests under
+        <code>-race</code>, a PostgreSQL service container, and a live-chain job that deploys the
+        registries to Anvil and runs the integration suite against them.
+      </p>
+      <pre><code>git clone https://github.com/yorkerhodes3/sovereign-agent-trust-mesh
+cd sovereign-agent-trust-mesh
+
+# contracts
+cd contracts &amp;&amp; forge test
+
+# services
+cd services &amp;&amp; go test ./...
+
+# the live-chain suite, including the revocation proof
+anvil --port 8545 &amp;
+forge script script/DeployRegistries.s.sol --rpc-url http://127.0.0.1:8545 \
+  --broadcast --private-key $PK
+go test -tags integration ./...</code></pre>
+      <div class="buttons">
+        <a class="btn btn--primary" href="https://github.com/yorkerhodes3/sovereign-agent-trust-mesh">Read the code</a>
+        <a class="btn" href="architecture.html">Architecture</a>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer class="site-footer">
+  <div class="site-footer__inner">
+    <div>
+      <p><strong>Sovereign Agent Trust Mesh</strong><br>
+      <span class="muted">A research prototype. Apache-2.0.</span></p>
+    </div>
+    <div>
+      <p class="muted"><strong>Repository</strong></p>
+      <ul>
+        <li><a href="https://github.com/yorkerhodes3/sovereign-agent-trust-mesh">Source on GitHub</a></li>
+        <li><a href="https://github.com/yorkerhodes3/sovereign-agent-trust-mesh/blob/main/docs/SPIKE-FINDINGS.md">Spike findings</a></li>
+        <li><a href="https://github.com/yorkerhodes3/sovereign-agent-trust-mesh/blob/main/BACKLOG.md">Backlog</a></li>
+      </ul>
+    </div>
+    <div>
+      <p class="muted"><strong>Builds on</strong></p>
+      <ul>
+        <li><a href="https://github.com/google/sam">Google SAM</a></li>
+        <li><a href="https://ercs.ethereum.org/ERCS/erc-8004">ERC-8004</a></li>
+        <li><a href="https://eips.ethereum.org/EIPS/eip-8226">ERC-8226</a></li>
+      </ul>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>

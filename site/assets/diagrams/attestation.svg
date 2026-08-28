@@ -1,0 +1,136 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 500" role="img"
+     aria-labelledby="att-title att-desc" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">
+  <title id="att-title">Why the Call Attestation is necessary, not defence in depth</title>
+  <desc id="att-desc">SAM authenticates the calling peer at the transport layer using Biscuit
+    tokens, so the responding sam-node knows the caller's PeerID. But sam-node forwards the raw
+    stream to a locally spawned MCP service as a dumb-pipe proxy and discards the caller identity.
+    The local service therefore sees no caller identity at all. The Call Attestation restores it by
+    travelling inside the request payload, signed by a sidecar key that is itself covered by both
+    binding signatures.</desc>
+
+  <style>
+    .card    { fill: #0d1117; stroke: #2f3742; }
+    .raised  { fill: #151b23; stroke: #2f3742; }
+    .txt     { fill: #e6edf3; }
+    .muted   { fill: #9198a1; }
+    .dim     { fill: #6e7681; }
+    .accent  { fill: #6cb6ff; }
+    .line    { stroke: #444c56; }
+    .lfill   { fill: #444c56; }
+    .ok      { stroke: #57ab5a; }
+    .okfill  { fill: #57ab5a; }
+    .okbox   { fill: rgba(87,171,90,0.10); stroke: #57ab5a; }
+    .bad     { stroke: #e5534b; }
+    .badfill { fill: #e5534b; }
+    .badbox  { fill: rgba(229,83,75,0.10); stroke: #e5534b; }
+    @media (prefers-color-scheme: light) {
+      .card    { fill: #ffffff; stroke: #d1d9e0; }
+      .raised  { fill: #f6f8fa; stroke: #d1d9e0; }
+      .txt     { fill: #1f2328; }
+      .muted   { fill: #59636e; }
+      .dim     { fill: #818b98; }
+      .accent  { fill: #0969da; }
+      .line    { stroke: #b7bfc7; }
+      .lfill   { fill: #b7bfc7; }
+      .ok      { stroke: #1a7f37; }
+      .okfill  { fill: #1a7f37; }
+      .okbox   { fill: rgba(26,127,55,0.08); stroke: #1a7f37; }
+      .bad     { stroke: #cf222e; }
+      .badfill { fill: #cf222e; }
+      .badbox  { fill: rgba(207,34,46,0.08); stroke: #cf222e; }
+    }
+  </style>
+
+  <defs>
+    <marker id="a-grey" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" class="lfill"/>
+    </marker>
+    <marker id="a-ok" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" class="okfill"/>
+    </marker>
+  </defs>
+
+  <!-- ===================== what SAM actually does (spike S-5) ================== -->
+
+  <text class="dim" x="20" y="28" font-size="11" letter-spacing="1.5">WHAT SAM ACTUALLY DOES — MEASURED IN SPIKE S-5</text>
+
+  <!-- caller -->
+  <rect class="raised" x="20" y="48" width="170" height="72" rx="7" stroke-width="1"/>
+  <text class="txt"   x="105" y="76" font-size="12" text-anchor="middle" font-weight="600">calling agent</text>
+  <text class="dim"   x="105" y="96" font-size="10" text-anchor="middle">12D3KooW…A</text>
+
+  <!-- transport -->
+  <line class="line" x1="190" y1="84" x2="268" y2="84" stroke-width="2" marker-end="url(#a-grey)"/>
+  <text class="muted" x="229" y="72" font-size="10" text-anchor="middle">libp2p</text>
+  <text class="dim"   x="229" y="106" font-size="9" text-anchor="middle">Biscuit auth</text>
+
+  <!-- responder node -->
+  <rect class="raised" x="268" y="48" width="190" height="72" rx="7" stroke-width="1"/>
+  <text class="txt" x="363" y="72" font-size="12" text-anchor="middle" font-weight="600">sam-node</text>
+  <text class="okfill" x="363" y="92" font-size="10" text-anchor="middle">knows the caller PeerID</text>
+  <text class="dim" x="363" y="108" font-size="9" text-anchor="middle">authenticated at transport</text>
+
+  <!-- the drop -->
+  <line class="bad" x1="458" y1="84" x2="560" y2="84" stroke-width="2" stroke-dasharray="5 4"/>
+  <text class="badfill" x="509" y="72" font-size="10" text-anchor="middle" font-weight="600">dumb-pipe proxy</text>
+  <text class="badfill" x="509" y="106" font-size="9" text-anchor="middle">identity discarded</text>
+
+  <!-- local service -->
+  <rect class="card" x="560" y="48" width="200" height="72" rx="7" stroke-width="1"/>
+  <text class="txt" x="660" y="72" font-size="12" text-anchor="middle" font-weight="600">local MCP service</text>
+  <text class="badfill" x="660" y="92" font-size="10" text-anchor="middle">sees NO caller identity</text>
+  <text class="dim" x="660" y="108" font-size="9" text-anchor="middle">no SAM_* env vars</text>
+
+  <!-- consequence -->
+  <rect class="badbox" x="20" y="146" width="740" height="52" rx="6" stroke-width="1"/>
+  <text class="badfill" x="40" y="170" font-size="11" font-weight="600">
+    Consequence: if the service trusted a peerId field in the request body,
+  </text>
+  <text class="badfill" x="40" y="188" font-size="11" font-weight="600">
+    any caller could name someone else's agent and inherit its trust tier and spending authority.
+  </text>
+
+  <!-- ========================= what the attestation adds ======================= -->
+
+  <line class="line" x1="20" y1="228" x2="880" y2="228" stroke-width="1"/>
+
+  <text class="dim" x="20" y="262" font-size="11" letter-spacing="1.5">WHAT THE CALL ATTESTATION RESTORES</text>
+
+  <!-- caller sidecar -->
+  <rect class="raised" x="20" y="284" width="200" height="96" rx="7" stroke-width="1"/>
+  <text class="accent" x="120" y="310" font-size="12" text-anchor="middle" font-weight="600">caller sidecar</text>
+  <text class="muted"  x="120" y="332" font-size="10" text-anchor="middle">signs one attestation</text>
+  <text class="muted"  x="120" y="348" font-size="10" text-anchor="middle">per call, with its</text>
+  <text class="txt"    x="120" y="366" font-size="11" text-anchor="middle" font-weight="600">sidecarKey</text>
+
+  <!-- the attestation payload -->
+  <rect class="card" x="268" y="266" width="364" height="132" rx="7" stroke-width="1"/>
+  <text class="accent" x="288" y="292" font-size="11" font-weight="600">urn:satm:call-attestation-v1</text>
+  <line class="line" x1="288" y1="302" x2="612" y2="302" stroke-width="1"/>
+  <text class="muted" x="288" y="322" font-size="10">callerCaid · callerPeerId · callerBindingId</text>
+  <text class="muted" x="288" y="340" font-size="10">targetCaid · targetPeerId · targetBindingId</text>
+  <text class="muted" x="288" y="358" font-size="10">service · tool · argsHash</text>
+  <text class="muted" x="288" y="376" font-size="10">nonce · issuedAt · expiresAt</text>
+  <text class="dim"   x="288" y="392" font-size="9">travels inside the MCP request payload</text>
+
+  <line class="ok" x1="220" y1="332" x2="268" y2="332" stroke-width="2" marker-end="url(#a-ok)"/>
+  <line class="ok" x1="632" y1="332" x2="680" y2="332" stroke-width="2" marker-end="url(#a-ok)"/>
+
+  <!-- responder sidecar -->
+  <rect class="raised" x="680" y="284" width="200" height="96" rx="7" stroke-width="1"/>
+  <text class="accent" x="780" y="310" font-size="12" text-anchor="middle" font-weight="600">responder sidecar</text>
+  <text class="muted"  x="780" y="332" font-size="10" text-anchor="middle">verifies checks V1–V8,</text>
+  <text class="muted"  x="780" y="348" font-size="10" text-anchor="middle">denies on the first</text>
+  <text class="muted"  x="780" y="364" font-size="10" text-anchor="middle">failure</text>
+
+  <!-- key insight -->
+  <rect class="okbox" x="20" y="428" width="860" height="56" rx="6" stroke-width="1"/>
+  <text class="okfill" x="40" y="452" font-size="11" font-weight="600">
+    The sidecarKey sits inside the binding document, so it is covered by BOTH binding signatures.
+  </text>
+  <text class="okfill" x="40" y="472" font-size="11">
+    Its authority is inherited from the two cold proofs — it is never asserted separately.
+  </text>
+</svg>

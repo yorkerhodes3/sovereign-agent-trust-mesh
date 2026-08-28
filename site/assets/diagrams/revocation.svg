@@ -1,0 +1,113 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 400" role="img"
+     aria-labelledby="rev-title rev-desc" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">
+  <title id="rev-title">Selling an agent revokes its mesh access automatically</title>
+  <desc id="rev-desc">When an agent's ERC-721 token is transferred to a new owner, ERC-8004 clears
+    the agentWallet metadata to the zero address. The broker's reconciliation loop re-reads that
+    value on its next sweep, check B7 fails, and the binding is revoked. No SATM-specific
+    bookkeeping tracks the sale. This behaviour is verified end to end by an automated test against
+    a live chain.</desc>
+
+  <style>
+    .card    { fill: #0d1117; stroke: #2f3742; }
+    .raised  { fill: #151b23; stroke: #2f3742; }
+    .txt     { fill: #e6edf3; }
+    .muted   { fill: #9198a1; }
+    .dim     { fill: #6e7681; }
+    .accent  { fill: #6cb6ff; }
+    .line    { stroke: #444c56; }
+    .lfill   { fill: #444c56; }
+    .ok      { stroke: #57ab5a; }
+    .okfill  { fill: #57ab5a; }
+    .okbox   { fill: rgba(87,171,90,0.10); stroke: #57ab5a; }
+    .bad     { stroke: #e5534b; }
+    .badfill { fill: #e5534b; }
+    .badbox  { fill: rgba(229,83,75,0.10); stroke: #e5534b; }
+    @media (prefers-color-scheme: light) {
+      .card    { fill: #ffffff; stroke: #d1d9e0; }
+      .raised  { fill: #f6f8fa; stroke: #d1d9e0; }
+      .txt     { fill: #1f2328; }
+      .muted   { fill: #59636e; }
+      .dim     { fill: #818b98; }
+      .accent  { fill: #0969da; }
+      .line    { stroke: #b7bfc7; }
+      .lfill   { fill: #b7bfc7; }
+      .ok      { stroke: #1a7f37; }
+      .okfill  { fill: #1a7f37; }
+      .okbox   { fill: rgba(26,127,55,0.08); stroke: #1a7f37; }
+      .bad     { stroke: #cf222e; }
+      .badfill { fill: #cf222e; }
+      .badbox  { fill: rgba(207,34,46,0.08); stroke: #cf222e; }
+    }
+  </style>
+
+  <defs>
+    <marker id="r-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7"
+            orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" class="lfill"/>
+    </marker>
+  </defs>
+
+  <text class="dim" x="20" y="28" font-size="11" letter-spacing="1.5">NOTHING SATM-SPECIFIC TRACKS THE SALE</text>
+
+  <!-- step 1 -->
+  <rect class="raised" x="20" y="52" width="188" height="112" rx="7" stroke-width="1"/>
+  <text class="dim"   x="38" y="76" font-size="10">STEP 1</text>
+  <text class="txt"   x="38" y="100" font-size="12" font-weight="600">Agent is sold</text>
+  <text class="muted" x="38" y="124" font-size="10">the ERC-721 token</text>
+  <text class="muted" x="38" y="140" font-size="10">moves to a new owner</text>
+  <text class="dim"   x="38" y="158" font-size="9">transferFrom(...)</text>
+
+  <line class="line" x1="208" y1="108" x2="240" y2="108" stroke-width="2" marker-end="url(#r-arrow)"/>
+
+  <!-- step 2 -->
+  <rect class="raised" x="240" y="52" width="188" height="112" rx="7" stroke-width="1"/>
+  <text class="dim"   x="258" y="76" font-size="10">STEP 2</text>
+  <text class="txt"   x="258" y="100" font-size="12" font-weight="600">ERC-8004 reacts</text>
+  <text class="muted" x="258" y="124" font-size="10">agentWallet is cleared</text>
+  <text class="badfill" x="258" y="142" font-size="11" font-weight="600">→ address(0)</text>
+  <text class="dim"   x="258" y="158" font-size="9">upstream behaviour, not ours</text>
+
+  <line class="line" x1="428" y1="108" x2="460" y2="108" stroke-width="2" marker-end="url(#r-arrow)"/>
+
+  <!-- step 3 -->
+  <rect class="raised" x="460" y="52" width="188" height="112" rx="7" stroke-width="1"/>
+  <text class="dim"   x="478" y="76" font-size="10">STEP 3</text>
+  <text class="txt"   x="478" y="100" font-size="12" font-weight="600">Broker sweeps</text>
+  <text class="muted" x="478" y="124" font-size="10">reconciler re-reads it</text>
+  <text class="muted" x="478" y="140" font-size="10">and check B7 fails</text>
+  <text class="dim"   x="478" y="158" font-size="9">bounded by reconcileInterval</text>
+
+  <line class="line" x1="648" y1="108" x2="680" y2="108" stroke-width="2" marker-end="url(#r-arrow)"/>
+
+  <!-- step 4 -->
+  <rect class="card" x="680" y="52" width="200" height="112" rx="7" stroke-width="1"
+        stroke-dasharray="0"/>
+  <text class="dim"   x="698" y="76" font-size="10">STEP 4</text>
+  <text class="badfill" x="698" y="100" font-size="12" font-weight="600">Access revoked</text>
+  <text class="muted" x="698" y="124" font-size="10">binding retired, reason</text>
+  <text class="txt"   x="698" y="142" font-size="10" font-weight="600">agent_wallet_unset</text>
+  <text class="dim"   x="698" y="158" font-size="9">nonce is NOT released</text>
+
+  <!-- proof strip -->
+  <rect class="okbox" x="20" y="200" width="860" height="80" rx="6" stroke-width="1"/>
+  <text class="okfill" x="40" y="226" font-size="11" font-weight="600" letter-spacing="1">
+    VERIFIED BY AN AUTOMATED TEST AGAINST A LIVE CHAIN
+  </text>
+  <text class="muted" x="40" y="250" font-size="11">
+    TestLiveReconcileRevokesTransferredAgent registers an agent, binds it, transfers the NFT with
+  </text>
+  <text class="muted" x="40" y="268" font-size="11">
+    cast, asserts the on-chain wallet actually cleared, then asserts the next sweep revokes.
+  </text>
+
+  <!-- the negative controls, which matter as much -->
+  <text class="dim" x="20" y="318" font-size="11" letter-spacing="1.5">AND THE INVERSE, WHICH MATTERS AS MUCH</text>
+
+  <rect class="card" x="20" y="334" width="424" height="50" rx="6" stroke-width="1"/>
+  <text class="txt"   x="40" y="356" font-size="11" font-weight="600">A healthy binding survives repeated sweeps</text>
+  <text class="dim"   x="40" y="374" font-size="10">a reconciler that revoked good bindings would be worse than none</text>
+
+  <rect class="card" x="456" y="334" width="424" height="50" rx="6" stroke-width="1"/>
+  <text class="txt"   x="476" y="356" font-size="11" font-weight="600">An RPC outage revokes nothing</text>
+  <text class="dim"   x="476" y="374" font-size="10">&quot;could not check&quot; must never be read as &quot;checked and failed&quot;</text>
+</svg>

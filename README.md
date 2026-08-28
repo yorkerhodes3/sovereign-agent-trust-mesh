@@ -2,6 +2,9 @@
 
 > Combining Google SAM and Ethereum agent registries into a cross-enterprise agent economy.
 
+**📖 [Read the explainer →](https://yorkerhodes3.github.io/sovereign-agent-trust-mesh/)** — the
+short, illustrated version of everything below.
+
 AI agents can already talk to each other and invoke tools. What they cannot do is **trust each
 other across organizational boundaries** — answer "who owns this agent, what authority does it
 hold, what has it actually done, and what proof exists?" without a pre-existing relationship.
@@ -51,6 +54,7 @@ windows.
 
 | Document | What it covers |
 | --- | --- |
+| **[Explainer site](https://yorkerhodes3.github.io/sovereign-agent-trust-mesh/)** | **The illustrated short version — start here** ([source](site/)) |
 | [CONCEPT-BRIEF.md](CONCEPT-BRIEF.md) | The original vision and six-plane architecture |
 | **[SPECIFICATION.md](SPECIFICATION.md)** | Full technical specification: binding protocol, trust tiers, components, contracts, flows, threat model, conformance |
 | **[PLAN.md](PLAN.md)** | Phased implementation plan, spikes, work breakdown, risk register, milestones |
