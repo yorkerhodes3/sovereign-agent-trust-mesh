@@ -1,0 +1,94 @@
+{
+  "schemaVersion": 1,
+  "id": "sovereign-agent-trust-mesh",
+  "title": "Sovereign Agent Trust Mesh (SATM)",
+  "repo": "yorkerhodes3/sovereign-agent-trust-mesh",
+  "summary": "A prototype trust fabric that lets AI agents in different organizations verify who owns an agent, what authority it holds and what it has done, by joining Google SAM with ERC-8004 and ERC-8226 registries.",
+  "kind": "infrastructure",
+  "methodTags": [
+    "agentic-workloads",
+    "blockchain",
+    "ethereum",
+    "provenance"
+  ],
+  "domainTags": [
+    "cybersecurity",
+    "commerce"
+  ],
+  "contribution": {
+    "date": "2026-08-28",
+    "role": "built",
+    "credits": []
+  },
+  "narrative": {
+    "problem": "AI agents can already talk to each other and invoke tools, but they cannot trust each other across organizational boundaries without a pre-existing relationship. Google SAM has no global reputation or verifiable mandates, ERC-8004 has no transport, ERC-8226 has neither, and nothing binds a libp2p PeerID to an on-chain agentId.",
+    "decision": "An Agent Mesh Binding: one canonical document signed twice, by the node's libp2p host key and by the agent's ERC-8004 agentWallet via EIP-712, so on-chain identity can gate mesh traffic; SAM is integrated unforked through documented HTTP and YAML seams.",
+    "tradeoff": "The chain is the source of truth and the mesh only caches it, so revocation lands at the next reconcile sweep, non-asset decisions may proceed within bounded, logged staleness windows, and an RPC outage revokes nothing rather than everything.",
+    "limitation": "Phase 2 is 11 of 14 tasks done. Outbound sidecar authorization returns 501 pending the Phase 3 trust plane; the enrollment gate, CLI, indexer, mandates and agents are not started; the devnet compose has not been run; ERC-8226 is a draft EIP implemented from its text."
+  },
+  "evidence": {
+    "level": "evaluated-result",
+    "links": [
+      {
+        "label": "Latest commit",
+        "url": "https://github.com/yorkerhodes3/sovereign-agent-trust-mesh/commit/d5ca1487a9862e9b01d4b960f82cdeeec043332b",
+        "date": "2026-08-28"
+      },
+      {
+        "label": "README",
+        "url": "https://github.com/yorkerhodes3/sovereign-agent-trust-mesh#readme",
+        "date": "2026-08-28"
+      },
+      {
+        "label": "Specification",
+        "url": "https://github.com/yorkerhodes3/sovereign-agent-trust-mesh/blob/main/SPECIFICATION.md",
+        "date": "2026-08-28"
+      },
+      {
+        "label": "Phase 1 spike findings",
+        "url": "https://github.com/yorkerhodes3/sovereign-agent-trust-mesh/blob/main/docs/SPIKE-FINDINGS.md",
+        "date": "2026-08-28"
+      },
+      {
+        "label": "Demo scenario and negative controls",
+        "url": "https://github.com/yorkerhodes3/sovereign-agent-trust-mesh/blob/main/docs/DEMO.md",
+        "date": "2026-08-28"
+      },
+      {
+        "label": "Backlog: built and not built",
+        "url": "https://github.com/yorkerhodes3/sovereign-agent-trust-mesh/blob/main/BACKLOG.md",
+        "date": "2026-08-28"
+      }
+    ]
+  },
+  "links": {
+    "source": "https://github.com/yorkerhodes3/sovereign-agent-trust-mesh"
+  },
+  "images": [
+    {
+      "id": "missing-joint",
+      "src": ".portfolio/missing-joint.webp",
+      "alt": "Diagram of Google SAM, ERC-8004 and ERC-8226 as three boxes with a question mark between SAM and ERC-8004, above a gap panel where a network identity and an on-chain identity are joined only by a dashed line labelled nothing binds these.",
+      "caption": "The missing joint: network identity and on-chain identity are not bound, so on-chain trust cannot gate mesh traffic. SATM's binding closes that gap.",
+      "credit": "Image from the sovereign-agent-trust-mesh repository",
+      "source": "repository file site/assets/diagrams/missing-joint.svg"
+    },
+    {
+      "id": "binding",
+      "src": ".portfolio/binding.webp",
+      "alt": "Diagram of one canonical binding document listing agentRegistry, agentId, agentWallet, peerId, sidecarKey, meshId, nonce and expiry, signed by both the libp2p host key and the ERC-8004 agentWallet via EIP-712.",
+      "caption": "The Agent Mesh Binding is signed by two keys; forging one requires both, and neither claim alone proves anything.",
+      "credit": "Image from the sovereign-agent-trust-mesh repository",
+      "source": "repository file site/assets/diagrams/binding.svg"
+    },
+    {
+      "id": "revocation",
+      "src": ".portfolio/revocation.webp",
+      "alt": "Four-step diagram: an agent's NFT is sold, ERC-8004 clears agentWallet, the broker's reconciler re-reads it and check B7 fails, and access is revoked; a panel notes this is verified by an automated test against a live chain.",
+      "caption": "Selling an agent revokes its mesh access with no SATM-specific logic, verified by a live-chain test; an RPC outage revokes nothing.",
+      "credit": "Image from the sovereign-agent-trust-mesh repository",
+      "source": "repository file site/assets/diagrams/revocation.svg"
+    }
+  ],
+  "defaultImageId": "missing-joint"
+}
